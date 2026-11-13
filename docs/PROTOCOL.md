@@ -1,16 +1,19 @@
 # wetland protocol (v1)
 
-All integers are big-endian. Primitives: X25519, ChaCha20-Poly1305 (IETF, 12-byte
-nonce, 16-byte tag), SHA-256, HKDF-SHA256. Everything is provided by OpenSSL 3.
+All integers are big-endian. Primitives: X25519, XChaCha20-Poly1305 (24-byte
+nonce, 16-byte tag), BLAKE2b, and a keyed-BLAKE2b PRF used as the KDF. Everything
+is provided by the vendored, public-domain Monocypher — no external dependency.
+
+The KDF is `kdf(key, msg) = BLAKE2b-keyed(key, msg)`.
 
 ## 1. Key derivation
 
 From the user secret `S` (a UTF-8 string):
 
 ```
-PSK   = HKDF(salt="wetland/psk/v1",   ikm=S, info="",          L=32)
-ADDR  = HKDF(salt="wetland/addr/v1",  ikm=S, info=epoch_be64,  L=16)
-TOKEN = HKDF(salt="wetland/token/v1", ikm=S, info="",          L=16)
+PSK   = kdf(key="wetland/psk/v1",   msg=S)                 [32 bytes]
+ADDR  = kdf(key="wetland/addr/v1",  msg=epoch_be64 || S)   [16 bytes]
+TOKEN = kdf(key="wetland/token/v1", msg=S)                 [16 bytes]
 ```
 
 `epoch = 0` gives a static address. With `-R SECS`, `epoch = unixtime / SECS`,
@@ -63,13 +66,13 @@ Key schedule:
 
 ```
 dh   = X25519(e_priv_self, e_pub_peer)
-h    = SHA256("wetland-handshake-v1" || e_pub_i || e_pub_r)
-prk  = HKDF-Extract(salt = h, ikm = dh || PSK)
+h    = BLAKE2b("wetland-handshake-v1" || e_pub_i || e_pub_r)
+prk  = kdf(key = h, msg = dh || PSK)
 
-k_i2r  = HKDF-Expand(prk, "wld-data-i2r", 32)   # initiator → responder data
-k_r2i  = HKDF-Expand(prk, "wld-data-r2i", 32)   # responder → initiator data
-kc_i2r = HKDF-Expand(prk, "wld-conf-i2r", 32)   # confirmation keys
-kc_r2i = HKDF-Expand(prk, "wld-conf-r2i", 32)
+k_i2r  = kdf(prk, "wld-data-i2r")   # initiator → responder data
+k_r2i  = kdf(prk, "wld-data-r2i")   # responder → initiator data
+kc_i2r = kdf(prk, "wld-conf-i2r")   # confirmation keys
+kc_r2i = kdf(prk, "wld-conf-r2i")
 ```
 
 `confirm_X = AEAD_seal(key=kc_<dir>, nonce=0, aad=h, plaintext="")` — i.e. the
@@ -90,7 +93,7 @@ Each record:
 ```
 
 - `ciphertext = AEAD_seal(key=k_<dir>, nonce=counter, aad=clen_be16, plaintext)`
-- `nonce` = 12 bytes, big-endian 64-bit `counter` in the low 8 bytes, per
+- `nonce` = 24 bytes, big-endian 64-bit `counter` in the low 8 bytes, per
   direction, starting at 0 and incrementing by 1 each record. The connection is
   torn down before the counter can wrap.
 - Transport keys are distinct from confirmation keys, so transport counters start

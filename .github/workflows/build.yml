@@ -1,0 +1,58 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build + test
+        run: make test
+      - name: cross-build Windows (mingw)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64
+          make windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wetland-linux-x86_64
+          path: bin/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wetland-windows-x86_64
+          path: dist/windows/
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build + test
+        run: make test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wetland-macos-arm64
+          path: bin/
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          install: >-
+            make
+            mingw-w64-ucrt-x86_64-gcc
+      - name: build (native)
+        run: make CC=gcc all
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wetland-windows-native-x86_64
+          path: bin/

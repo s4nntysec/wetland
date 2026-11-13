@@ -1,12 +1,16 @@
 #include "wld_tunnel.h"
 #include "wld_net.h"
 #include "wld_proto.h"
+#include "wld_compat.h"
 
-#include <errno.h>
-#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef _WIN32  /* ===================== POSIX pump (poll) ===================== */
+
+#include <errno.h>
+#include <poll.h>
 #include <unistd.h>
 #include <sys/socket.h>
 
@@ -280,3 +284,100 @@ out:
 	buf_free(&rxp);
 	return rc;
 }
+
+#else  /* ===================== Windows pump (threads) ===================== */
+
+#include <windows.h>
+#include <process.h>
+#include <io.h>
+
+/*
+ * WSAPoll works only on sockets, not on stdin/stdout/pipes, so on Windows we
+ * use two blocking threads: one seals local input into tunnel records, the
+ * other opens tunnel records into local output. Suited to pipe/file transfer;
+ * fully interactive console I/O is a known limitation (see README).
+ */
+struct winpump {
+	int tun, local_rd, local_wr;
+	wld_session *sess;
+};
+
+static unsigned __stdcall
+win_tx(void *arg)
+{
+	struct winpump *w = arg;
+	uint8_t staging[WLD_REC_MAX_PLAIN];
+	uint8_t cipher[WLD_REC_MAX_CIPHER];
+	for (;;) {
+		int n = _read(w->local_rd, staging, sizeof staging);
+		if (n <= 0)
+			break;
+		if (w->sess->tx.counter == UINT64_MAX)
+			break;
+		uint8_t nonce[WLD_NONCE_LEN];
+		wld_nonce_from_counter(w->sess->tx.counter, nonce);
+		size_t clen = (size_t)n + WLD_TAG_LEN;
+		uint8_t hdr[2] = { (uint8_t)(clen >> 8), (uint8_t)(clen & 0xff) };
+		if (wld_aead_seal(w->sess->tx.key, nonce, hdr, 2, staging, n, cipher) != 0)
+			break;
+		w->sess->tx.counter++;
+		if (wld_write_all(w->tun, hdr, 2) != 0) break;
+		if (wld_write_all(w->tun, cipher, clen) != 0) break;
+	}
+	shutdown((SOCKET_CAST)w->tun, SHUT_WR);
+	return 0;
+}
+
+static unsigned __stdcall
+win_rx(void *arg)
+{
+	struct winpump *w = arg;
+	uint8_t cipher[WLD_REC_MAX_CIPHER];
+	uint8_t plain[WLD_REC_MAX_PLAIN];
+	for (;;) {
+		uint8_t hdr[2];
+		if (wld_read_all(w->tun, hdr, 2) != 0)
+			break;
+		size_t clen = ((size_t)hdr[0] << 8) | hdr[1];
+		if (clen < WLD_TAG_LEN || clen > WLD_REC_MAX_CIPHER)
+			break;
+		if (wld_read_all(w->tun, cipher, clen) != 0)
+			break;
+		uint8_t nonce[WLD_NONCE_LEN];
+		wld_nonce_from_counter(w->sess->rx.counter, nonce);
+		if (wld_aead_open(w->sess->rx.key, nonce, hdr, 2, cipher, clen, plain) != 0)
+			break;
+		w->sess->rx.counter++;
+		size_t pt_len = clen - WLD_TAG_LEN;
+		size_t off = 0;
+		while (off < pt_len) {
+			int wn = _write(w->local_wr, plain + off, (unsigned)(pt_len - off));
+			if (wn <= 0) { off = pt_len; break; }
+			off += (size_t)wn;
+		}
+	}
+	return 0;
+}
+
+int
+wld_pump(int tun_fd, int local_rd, int local_wr, wld_session *sess)
+{
+	struct winpump w = { tun_fd, local_rd, local_wr, sess };
+	HANDLE th[2];
+	th[0] = (HANDLE)_beginthreadex(NULL, 0, win_tx, &w, 0, NULL);
+	th[1] = (HANDLE)_beginthreadex(NULL, 0, win_rx, &w, 0, NULL);
+	if (th[0] == NULL || th[1] == NULL)
+		return -1;
+
+	/* The rx thread (tunnel -> local) defines the session lifetime: it returns
+	 * when the peer closes, after delivering everything. Wait for it fully, then
+	 * give tx a short grace (a tx thread blocked on console input with no EOF is
+	 * abandoned at process exit — a known interactive limitation on Windows). */
+	WaitForSingleObject(th[1], INFINITE);
+	WaitForSingleObject(th[0], 2000);
+	CloseHandle(th[0]);
+	CloseHandle(th[1]);
+	return 0;
+}
+
+#endif  /* _WIN32 */

@@ -48,7 +48,7 @@ static void
 test_aead(void)
 {
 	printf("aead:\n");
-	uint8_t key[32], nonce[12];
+	uint8_t key[32], nonce[WLD_NONCE_LEN];
 	memset(key, 0x42, sizeof key);
 	wld_nonce_from_counter(1, nonce);
 
@@ -76,7 +76,7 @@ test_aead(void)
 	aad[0] ^= 0x01;
 
 	/* wrong nonce */
-	uint8_t n2[12];
+	uint8_t n2[WLD_NONCE_LEN];
 	wld_nonce_from_counter(2, n2);
 	CHECK(wld_aead_open(key, n2, aad, sizeof aad, ct, ptlen + 16, out) != 0,
 	    "wrong nonce rejected");
@@ -99,7 +99,7 @@ run_handshake(const uint8_t psk_init[32], const uint8_t psk_resp[32],
 		int code = (rc == 0) ? 0 : (rc == -2 ? 2 : 1);
 		if (rc == 0 && do_roundtrip) {
 			/* responder decrypts one record from initiator (counter 0, rx key) */
-			uint8_t nonce[12], buf[64];
+			uint8_t nonce[WLD_NONCE_LEN], buf[64];
 			wld_nonce_from_counter(0, nonce);
 			uint8_t ct[64];
 			if (read(sv[1], ct, 5 + 16) == 5 + 16 &&
@@ -116,7 +116,7 @@ run_handshake(const uint8_t psk_init[32], const uint8_t psk_resp[32],
 	wld_session s;
 	int rc = wld_handshake(sv[0], 1 /*initiator*/, psk_init, &s);
 	if (rc == 0 && do_roundtrip) {
-		uint8_t nonce[12], ct[64];
+		uint8_t nonce[WLD_NONCE_LEN], ct[64];
 		wld_nonce_from_counter(0, nonce);
 		wld_aead_seal(s.tx.key, nonce, NULL, 0, (const uint8_t *)"HELLO", 5, ct);
 		if (write(sv[0], ct, 5 + 16) != 5 + 16) { /* ignore */ }

@@ -10,17 +10,18 @@
 #include "wld_proto.h"
 #include "wld_net.h"
 #include "wld_crypto.h"
+#include "wld_compat.h"
 
 #include <errno.h>
-#include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
-#include <sys/socket.h>
+#ifdef _WIN32
+#  include <getopt.h>
+#endif
 
 #define RELAY_OUTBUF   (128 * 1024)
 #define MAX_CONNS      8192
@@ -110,7 +111,7 @@ static void
 conn_close(conn_t *c)
 {
 	if (c->fd >= 0)
-		close(c->fd);
+		wld_closesocket(c->fd);
 	free(c->out);
 	int fd = c->fd;
 	memset(c, 0, sizeof *c);
@@ -228,16 +229,14 @@ static void
 accept_new(int lfd)
 {
 	for (;;) {
-		int fd = accept(lfd, NULL, NULL);
+		int fd = (int)accept((SOCKET_CAST)lfd, NULL, NULL);
 		if (fd < 0) {
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
-				return;
-			if (errno == EINTR)
+			if (wld_eintr())
 				continue;
-			return;
+			return; /* would-block or real error: stop accepting for now */
 		}
 		if (fd >= g_cap || fd >= MAX_CONNS) {
-			close(fd);
+			wld_closesocket(fd);
 			continue;
 		}
 		conn_t *c = &g_conns[fd];
@@ -254,14 +253,14 @@ accept_new(int lfd)
 static void
 do_hello_read(conn_t *c)
 {
-	ssize_t r = read(c->fd, c->hbuf + c->hlen, WLD_HELLO_LEN - c->hlen);
+	long r = wld_sock_read(c->fd, c->hbuf + c->hlen, WLD_HELLO_LEN - c->hlen);
 	if (r > 0) {
 		c->hlen += (size_t)r;
 		if (c->hlen == WLD_HELLO_LEN)
 			handle_hello(c);
 	} else if (r == 0) {
 		conn_close(c);
-	} else if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+	} else if (!wld_wouldblock() && !wld_eintr()) {
 		conn_close(c);
 	}
 }
@@ -281,7 +280,7 @@ do_paired_read(conn_t *c)
 		room = sizeof tmp;
 	if (room == 0)
 		return; /* backpressure */
-	ssize_t r = read(c->fd, tmp, room);
+	long r = wld_sock_read(c->fd, tmp, room);
 	if (r > 0) {
 		if (conn_queue(p, tmp, (size_t)r) != 0) {
 			logv("OVERFLOW fd=%d -> peer fd=%d, tearing down", c->fd, p->fd);
@@ -289,7 +288,7 @@ do_paired_read(conn_t *c)
 		}
 	} else if (r == 0) {
 		c->rd_eof = 1; /* half-close: propagate once peer out drained */
-	} else if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+	} else if (!wld_wouldblock() && !wld_eintr()) {
 		tear_down_pair(c);
 	}
 }
@@ -299,13 +298,13 @@ do_write(conn_t *c)
 {
 	if (c->olen == 0)
 		return;
-	ssize_t w = write(c->fd, c->out + c->ooff, c->olen);
+	long w = wld_sock_write(c->fd, c->out + c->ooff, c->olen);
 	if (w > 0) {
 		c->ooff += (size_t)w;
 		c->olen -= (size_t)w;
 		if (c->olen == 0)
 			c->ooff = 0;
-	} else if (w < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+	} else if (w < 0 && !wld_wouldblock() && !wld_eintr()) {
 		if (c->state == ST_PAIRED)
 			tear_down_pair(c);
 		else
@@ -337,12 +336,18 @@ main(int argc, char **argv)
 		}
 	}
 
+#ifndef _WIN32
 	signal(SIGPIPE, SIG_IGN);
+#endif
 	signal(SIGINT, on_sig);
 	signal(SIGTERM, on_sig);
 
 	if (wld_crypto_init() != 0) {
 		fprintf(stderr, "crypto init failed\n");
+		return 1;
+	}
+	if (wld_net_startup() != 0) {
+		fprintf(stderr, "network init failed\n");
 		return 1;
 	}
 
@@ -365,7 +370,7 @@ main(int argc, char **argv)
 
 	fprintf(stderr, "wetland-relay listening on %s:%s\n", host ? host : "*", port);
 
-	struct pollfd *pfds = calloc(g_cap + 1, sizeof *pfds);
+	wld_pollfd *pfds = calloc(g_cap + 1, sizeof *pfds);
 	if (pfds == NULL)
 		return 1;
 
@@ -409,7 +414,7 @@ main(int argc, char **argv)
 			n++;
 		}
 
-		int pr = poll(pfds, n, 1000);
+		int pr = wld_poll(pfds, n, 1000);
 		if (pr < 0) {
 			if (errno == EINTR)
 				continue;
@@ -440,9 +445,8 @@ main(int argc, char **argv)
 				case ST_WAIT_CONNECT: {
 					/* any readable event here means peer closed */
 					uint8_t b;
-					ssize_t r = recv(c->fd, &b, 1, MSG_PEEK);
-					if (r <= 0 && !(r < 0 &&
-					    (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)))
+					long r = recv((SOCKET_CAST)c->fd, (char *)&b, 1, MSG_PEEK);
+					if (r <= 0 && !(r < 0 && (wld_wouldblock() || wld_eintr())))
 						conn_close(c);
 					break;
 				}
@@ -481,7 +485,7 @@ main(int argc, char **argv)
 
 			/* c finished sending and all of it reached p -> half-close p */
 			if (c->rd_eof && p->olen == 0 && !p->wr_shut) {
-				shutdown(p->fd, SHUT_WR);
+				shutdown((SOCKET_CAST)p->fd, SHUT_WR);
 				p->wr_shut = 1;
 			}
 
@@ -496,6 +500,6 @@ main(int argc, char **argv)
 	fprintf(stderr, "\nwetland-relay shutting down\n");
 	free(pfds);
 	free(g_conns);
-	close(lfd);
+	wld_closesocket(lfd);
 	return 0;
 }

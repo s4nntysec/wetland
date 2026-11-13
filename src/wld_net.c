@@ -1,17 +1,46 @@
 #include "wld_net.h"
+#include "wld_compat.h"
 
-#include <errno.h>
-#include <fcntl.h>
-#include <netdb.h>
 #include <string.h>
-#include <unistd.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <sys/socket.h>
+
+#ifdef _WIN32
+#  include <stdint.h>
+#else
+#  include <errno.h>
+#  include <fcntl.h>
+#  include <netdb.h>
+#  include <unistd.h>
+#  include <netinet/in.h>
+#  include <netinet/tcp.h>
+#  include <sys/socket.h>
+#endif
+
+int
+wld_net_startup(void)
+{
+#ifdef _WIN32
+	WSADATA wsa;
+	return WSAStartup(MAKEWORD(2, 2), &wsa) == 0 ? 0 : -1;
+#else
+	return 0;
+#endif
+}
+
+void
+wld_net_cleanup(void)
+{
+#ifdef _WIN32
+	WSACleanup();
+#endif
+}
 
 int
 wld_set_nonblock(int fd, int on)
 {
+#ifdef _WIN32
+	u_long mode = on ? 1 : 0;
+	return ioctlsocket((SOCKET)fd, FIONBIO, &mode) == 0 ? 0 : -1;
+#else
 	int fl = fcntl(fd, F_GETFL, 0);
 	if (fl < 0)
 		return -1;
@@ -20,13 +49,15 @@ wld_set_nonblock(int fd, int on)
 	else
 		fl &= ~O_NONBLOCK;
 	return fcntl(fd, F_SETFL, fl);
+#endif
 }
 
 void
 wld_set_keepalive(int fd)
 {
 	int on = 1;
-	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof on);
+	setsockopt((SOCKET_CAST)fd, SOL_SOCKET, SO_KEEPALIVE,
+	           (const char *)&on, sizeof on);
 }
 
 int
@@ -35,9 +66,9 @@ wld_read_all(int fd, void *buf, size_t n)
 	uint8_t *p = buf;
 	size_t off = 0;
 	while (off < n) {
-		ssize_t r = read(fd, p + off, n - off);
+		long r = wld_sock_read(fd, p + off, n - off);
 		if (r < 0) {
-			if (errno == EINTR)
+			if (wld_eintr())
 				continue;
 			return -1;
 		}
@@ -54,9 +85,9 @@ wld_write_all(int fd, const void *buf, size_t n)
 	const uint8_t *p = buf;
 	size_t off = 0;
 	while (off < n) {
-		ssize_t w = write(fd, p + off, n - off);
+		long w = wld_sock_write(fd, p + off, n - off);
 		if (w < 0) {
-			if (errno == EINTR)
+			if (wld_eintr())
 				continue;
 			return -1;
 		}
@@ -79,12 +110,12 @@ wld_tcp_connect(const char *host, const char *port)
 		return -1;
 
 	for (rp = res; rp != NULL; rp = rp->ai_next) {
-		fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+		fd = (int)socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 		if (fd < 0)
 			continue;
-		if (connect(fd, rp->ai_addr, rp->ai_addrlen) == 0)
+		if (connect((SOCKET_CAST)fd, rp->ai_addr, (int)rp->ai_addrlen) == 0)
 			break;
-		close(fd);
+		wld_closesocket(fd);
 		fd = -1;
 	}
 	freeaddrinfo(res);
@@ -109,14 +140,15 @@ wld_tcp_listen(const char *host, const char *port, int backlog)
 
 	for (rp = res; rp != NULL; rp = rp->ai_next) {
 		int on = 1;
-		fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+		fd = (int)socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 		if (fd < 0)
 			continue;
-		setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof on);
-		if (bind(fd, rp->ai_addr, rp->ai_addrlen) == 0 &&
-		    listen(fd, backlog) == 0)
+		setsockopt((SOCKET_CAST)fd, SOL_SOCKET, SO_REUSEADDR,
+		           (const char *)&on, sizeof on);
+		if (bind((SOCKET_CAST)fd, rp->ai_addr, (int)rp->ai_addrlen) == 0 &&
+		    listen((SOCKET_CAST)fd, backlog) == 0)
 			break;
-		close(fd);
+		wld_closesocket(fd);
 		fd = -1;
 	}
 	freeaddrinfo(res);

@@ -4,13 +4,18 @@
  * Secret derivation and the end-to-end handshake/transport.
  *
  * Design (see README.md "Security" for rationale):
- *   - A single shared secret derives everything via HKDF-SHA256 with
+ *   - A single shared secret derives everything via a keyed-BLAKE2b KDF with
  *     domain-separation salts.
  *   - The E2E session uses an authenticated key exchange modelled on the
  *     Noise "NNpsk0" pattern: ephemeral X25519 Diffie-Hellman mixed with the
- *     pre-shared key (PSK) through HKDF, followed by explicit key confirmation.
- *   - The transport is ChaCha20-Poly1305 AEAD with per-direction 64-bit
+ *     pre-shared key (PSK) through the KDF, followed by explicit key
+ *     confirmation.
+ *   - The transport is XChaCha20-Poly1305 AEAD with per-direction 64-bit
  *     counters. The relay only ever sees ciphertext.
+ *
+ * All primitives come from the vendored, public-domain Monocypher library, so
+ * wetland has no external crypto dependency and cross-compiles cleanly to
+ * Linux, macOS and Windows.
  */
 #ifndef WLD_CRYPTO_H
 #define WLD_CRYPTO_H 1
@@ -18,8 +23,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#define WLD_KEY_LEN     32   /* ChaCha20-Poly1305 / HKDF output key */
-#define WLD_NONCE_LEN   12   /* ChaCha20-Poly1305 IETF nonce        */
+#define WLD_KEY_LEN     32   /* XChaCha20-Poly1305 / KDF output key  */
+#define WLD_NONCE_LEN   24   /* XChaCha20 nonce                      */
 #define WLD_TAG_LEN     16   /* Poly1305 tag                        */
 #define WLD_DH_LEN      32   /* X25519 public key / shared secret   */
 #define WLD_ADDR_LEN    16   /* rendezvous address                  */
@@ -76,5 +81,8 @@ void wld_nonce_from_counter(uint64_t counter, uint8_t nonce[WLD_NONCE_LEN]);
 
 /* Fill buf with cryptographically secure random bytes. Returns 0 on success. */
 int wld_random(void *buf, size_t len);
+
+/* Securely zero sensitive memory (not optimised away). */
+void wld_wipe(void *buf, size_t len);
 
 #endif /* WLD_CRYPTO_H */

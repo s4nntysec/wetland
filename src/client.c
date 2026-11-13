@@ -15,18 +15,30 @@
 #include "wld_crypto.h"
 #include "wld_tunnel.h"
 
-#include <errno.h>
-#include <pty.h>
+#include "wld_compat.h"
+
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
 #include <time.h>
-#include <unistd.h>
-#include <sys/wait.h>
-#include <sys/socket.h>
-#include <openssl/crypto.h>
+
+#ifdef _WIN32
+#  include <getopt.h>
+#  include <io.h>
+#  include <fcntl.h>
+#else
+#  include <errno.h>
+#  include <termios.h>
+#  include <unistd.h>
+#  include <sys/wait.h>
+#  include <sys/socket.h>
+#  if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#    include <util.h>   /* forkpty on BSD/macOS */
+#  else
+#    include <pty.h>    /* forkpty on Linux (glibc) */
+#  endif
+#endif
 
 static int g_verbose;
 #define VLOG(...) do { if (g_verbose) fprintf(stderr, __VA_ARGS__); } while (0)
@@ -99,14 +111,14 @@ rendezvous(const char *host, const char *port, uint8_t role, int wait_flag,
 	memcpy(h.token, token, WLD_TOKEN_LEN);
 
 	if (wld_write_all(fd, &h, sizeof h) != 0) {
-		close(fd);
+		wld_closesocket(fd);
 		return -1;
 	}
 
 	for (;;) {
 		uint8_t t;
 		if (wld_read_all(fd, &t, 1) != 0) {
-			close(fd);
+			wld_closesocket(fd);
 			return -1;
 		}
 		if (t == WLD_R_WAIT) {
@@ -120,14 +132,14 @@ rendezvous(const char *host, const char *port, uint8_t role, int wait_flag,
 		if (t == WLD_R_ERR) {
 			uint8_t code = 0;
 			wld_read_all(fd, &code, 1);
-			close(fd);
+			wld_closesocket(fd);
 			if (code == WLD_E_NOSRV)
 				return -2;
 			fprintf(stderr, "wld: relay error: %s\n", wld_err_str(code));
 			return -1;
 		}
 		/* unexpected */
-		close(fd);
+		wld_closesocket(fd);
 		return -1;
 	}
 }
@@ -139,6 +151,8 @@ mode_pipe(int tun, wld_session *sess)
 {
 	return wld_pump(tun, STDIN_FILENO, STDOUT_FILENO, sess);
 }
+
+#ifndef _WIN32  /* exec + PTY modes rely on fork/forkpty/termios (POSIX only) */
 
 static int
 mode_exec(int tun, wld_session *sess, const char *cmd)
@@ -218,6 +232,8 @@ mode_pty_client(int tun, wld_session *sess)
 	return rc;
 }
 
+#endif /* !_WIN32 */
+
 /* ---- main --------------------------------------------------------------- */
 
 static void
@@ -279,9 +295,17 @@ main(int argc, char **argv)
 	if (host == NULL) host = "127.0.0.1";
 	if (port == NULL) port = WLD_RELAY_DEFAULT_PORT;
 
+#ifndef _WIN32
 	signal(SIGPIPE, SIG_IGN);
+#endif
 	if (wld_crypto_init() != 0)
 		die("crypto init failed");
+	if (wld_net_startup() != 0)
+		die("network init failed");
+#ifdef _WIN32
+	_setmode(_fileno(stdin), _O_BINARY);
+	_setmode(_fileno(stdout), _O_BINARY);
+#endif
 
 	char *gen = NULL;
 	if (do_gen) {
@@ -336,9 +360,19 @@ main(int argc, char **argv)
 		die("handshake failed");
 	VLOG("wld: secure channel established\n");
 
-	OPENSSL_cleanse(psk, sizeof psk);
+	wld_wipe(psk, sizeof psk);
 
 	int rc;
+#ifdef _WIN32
+	if (listen_mode && (interactive || cmd != NULL)) {
+		fprintf(stderr, "wld: -i/-e on the listener need a PTY; "
+		    "not supported on Windows yet (use WSL)\n");
+		rc = 1;
+	} else {
+		/* pipe mode covers file transfer and scripted I/O on Windows */
+		rc = mode_pipe(tun, &sess);
+	}
+#else
 	if (interactive) {
 		if (listen_mode) {
 			const char *shell = getenv("SHELL");
@@ -351,8 +385,9 @@ main(int argc, char **argv)
 	} else {
 		rc = mode_pipe(tun, &sess);
 	}
+#endif
 
-	close(tun);
+	wld_closesocket(tun);
 	free(gen);
 	return rc == 0 ? 0 : 1;
 }

@@ -9,14 +9,15 @@ read.
 
 It is a ground-up reimplementation of the ideas behind
 [THC's gsocket](https://github.com/hackerschoice/gsocket), written in C on top of
-OpenSSL 3, with a deliberately **modern cryptographic core** and a **self-hostable
-relay**.
+**zero external dependencies** (the crypto is the vendored, public-domain
+Monocypher), with a deliberately **modern cryptographic core**, a **self-hostable
+relay**, and clean builds for **Linux, macOS and Windows**.
 
 ```
    wld -s SECRET -l -i                 wld -s SECRET -i
    (behind NAT, serves a shell)        (anywhere in the world)
             │                                   │
-            │   encrypted (ChaCha20-Poly1305)   │
+            │  encrypted (XChaCha20-Poly1305)   │
             └──────────────┐     ┌──────────────┘
                            ▼     ▼
                    ┌───────────────────┐
@@ -34,7 +35,7 @@ relay**.
 ## Quick start
 
 ```sh
-make                      # builds bin/wld and bin/wetland-relay (needs OpenSSL 3)
+make                      # builds bin/wld and bin/wetland-relay (no external deps)
 make test                 # unit + end-to-end tests
 ```
 
@@ -87,7 +88,7 @@ tar cz ./src | wld -s SEC           wld -s SEC -l | tar xzv
 
 ## How it works
 
-1. **Derivation.** Both peers run the secret through HKDF-SHA256 with
+1. **Derivation.** Both peers run the secret through a keyed-BLAKE2b KDF with
    domain-separated salts to get three independent values:
    - a 16-byte **rendezvous address** (where they meet on the relay),
    - a 32-byte **PSK** (authenticates the end-to-end handshake),
@@ -101,7 +102,7 @@ tar cz ./src | wld -s SEC           wld -s SEC -l | tar xzv
    key confirmation. An eavesdropper (including the relay) can't derive the keys;
    an active man-in-the-middle without the secret fails the confirmation and both
    ends abort.
-4. **Transport.** Everything after that is ChaCha20-Poly1305 records with
+4. **Transport.** Everything after that is XChaCha20-Poly1305 records with
    per-direction 64-bit nonce counters and length-prefixed framing. Clean
    half-close is honored so pipes and `-e` commands see EOF correctly.
 
@@ -121,9 +122,9 @@ big finite-field DH is slow.
 
 wetland uses a **Noise-`NNpsk0`-style** exchange:
 - **X25519** ephemeral DH — fast, modern, constant-time.
-- **ChaCha20-Poly1305** AEAD transport — authenticated encryption, no padding
+- **XChaCha20-Poly1305** AEAD transport — authenticated encryption, no padding
   oracles.
-- **HKDF-SHA256** key schedule with a hashed transcript + **explicit key
+- A **keyed-BLAKE2b** key schedule with a hashed transcript + **explicit key
   confirmation** for mutual authentication and MITM detection.
 - **Forward secrecy** from the ephemeral keys: recording traffic and later
   learning the secret still doesn't decrypt past sessions.
@@ -183,10 +184,32 @@ src/client.c           wld — the client (pipe / exec / PTY modes)
 tests/                 crypto unit tests + end-to-end shell test
 ```
 
-Build needs a C11 compiler and **OpenSSL ≥ 3.0** (`libcrypto`), plus `libutil`
-for `forkpty` on Linux.
+Build needs only a **C11 compiler** — there is no external library dependency
+(all crypto is the vendored Monocypher in `src/monocypher/`).
 
 ---
+
+## Building for Linux, macOS and Windows
+
+Because there are no external dependencies, every target builds from the same
+sources:
+
+```sh
+make                 # native build (Linux or macOS) -> ./bin
+make windows         # cross-build Windows .exe (needs mingw-w64) -> ./dist/windows
+```
+
+| Platform | Relay | Client pipe / file transfer | Client exec (`-e`) / PTY shell (`-i`) |
+|----------|:-----:|:---------------------------:|:-------------------------------------:|
+| Linux    | ✅ | ✅ | ✅ |
+| macOS    | ✅ | ✅ | ✅ |
+| Windows  | ✅ | ✅ | ⛔ (needs a PTY/fork — use WSL for now) |
+
+On Windows the client uses a thread-based I/O pump (WSAPoll can't watch the
+console), so pipe mode and file transfer work; the interactive PTY shell and
+`-e` command execution on the *listener* are POSIX-only for now. The CI workflow
+(`.github/workflows/build.yml`) builds and tests on all three OSes and uploads
+binaries as artifacts.
 
 ## Roadmap
 
@@ -194,6 +217,13 @@ Not yet implemented (contributions welcome): SOCKS5 proxy mode, multi-connection
 TCP port-forwarding, terminal window-size (`SIGWINCH`) propagation, Tor/SOCKS
 egress to the relay, multi-relay load distribution, and daemon/background mode.
 
+## Credits
+
+- End-to-end crypto uses [Monocypher](https://monocypher.org/) by Loup Vaillant
+  (vendored in `src/monocypher/`, BSD-2-Clause OR CC0-1.0).
+- Inspired by [THC's gsocket](https://github.com/hackerschoice/gsocket).
+
 ## License
 
-BSD-2-Clause. See [`LICENSE`](LICENSE).
+BSD-2-Clause. See [`LICENSE`](LICENSE). The vendored Monocypher keeps its own
+(compatible) licence header.
