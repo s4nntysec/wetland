@@ -3,15 +3,12 @@
 **Connect like there is no firewall. Securely.**
 
 `wetland` lets two machines behind NAT/firewalls reach each other knowing only a
-shared secret — no port forwarding, no public IP, no certificates. They meet at a
-blind **relay** and then speak an end-to-end encrypted channel the relay cannot
-read.
+shared secret — no port forwarding, no public IP, no certificates. Both machines
+meet at a **relay** (a small server you run yourself) and then talk over an
+end-to-end encrypted channel that the relay cannot read.
 
-It is a ground-up reimplementation of the ideas behind
-[THC's gsocket](https://github.com/hackerschoice/gsocket), written in C on top of
-**zero external dependencies** (the crypto is the vendored, public-domain
-Monocypher), with a deliberately **modern cryptographic core**, a **self-hostable
-relay**, and clean builds for **Linux, macOS and Windows**.
+The project is written in C with **no external dependencies**, and builds for
+**Linux, macOS and Windows**.
 
 ```
    wld -s SECRET -l -i                 wld -s SECRET -i
@@ -26,204 +23,315 @@ relay**, and clean builds for **Linux, macOS and Windows**.
                    └───────────────────┘
 ```
 
-> ⚠️ **Dual-use tool.** wetland is for authorized remote administration,
-> penetration testing, CTFs, and connectivity research — the same space as the
-> original gsocket. Only use it on systems you own or are authorized to access.
+> ⚠️ **Dual-use tool.** wetland is meant for authorized remote administration,
+> penetration testing, CTFs and connectivity research. Only use it on systems you
+> own or are authorized to access.
 
 ---
 
-## Quick start
+## Contents
+
+1. [Requirements](#requirements)
+2. [Installation](#installation)
+3. [Running your own relay](#running-your-own-relay)
+4. [Using the client (`wld`)](#using-the-client-wld)
+5. [Command reference](#command-reference)
+6. [How it works](#how-it-works)
+7. [Security notes](#security-notes)
+8. [Platform support](#platform-support)
+9. [Project layout and tests](#project-layout-and-tests)
+10. [Roadmap](#roadmap)
+11. [License](#license)
+
+---
+
+## Requirements
+
+- A **C11 compiler** (`cc`, `clang` or `gcc`) and `make`.
+- Nothing else: there are no external libraries to install.
+- Optional, for Windows binaries from Linux/macOS: `mingw-w64`.
+- Optional, for the test suite: a POSIX shell (`bash`).
+
+---
+
+## Installation
+
+### Build from source (Linux or macOS)
 
 ```sh
-make                      # builds bin/wld and bin/wetland-relay (no external deps)
-make test                 # unit + end-to-end tests
+git clone https://github.com/s4nntysec/wetland.git
+cd wetland
+make                   # builds ./bin/wld and ./bin/wetland-relay
+make test              # optional: runs unit and end-to-end tests
 ```
 
-Run your own relay (one public host, any cheap VPS):
+### Install system-wide
+
+```sh
+sudo make install      # copies both binaries to /usr/local/bin
+```
+
+To install somewhere else, set `PREFIX`, for example
+`make install PREFIX=$HOME/.local`.
+
+### Cross-compile
+
+```sh
+make windows                        # Windows .exe files in ./dist/windows (needs mingw-w64)
+```
+
+### Windows
+
+Windows binaries are produced by `make windows` (or by the CI workflow, which
+also publishes them as artifacts). The client works in pipe and file-transfer
+mode on Windows. Interactive shells (`-i`) and command execution (`-e`) on the
+listening side are not available there yet; use WSL for those (see
+[Platform support](#platform-support)).
+
+After installation you have two programs:
+
+| Program | Role |
+|---------|------|
+| `wetland-relay` | the rendezvous server; run it on one public host |
+| `wld` | the client; run it on both machines that want to talk |
+
+---
+
+## Running your own relay
+
+Both clients must point to the same relay. The relay only has to be reachable
+on one TCP port from both sides, so any cheap VPS works.
 
 ```sh
 ./bin/wetland-relay -p 7440 -v
 ```
 
-Point both clients at it (`-H host -p port`, or the `WLD_RELAY_HOST` /
-`WLD_RELAY_PORT` env vars), then:
+| Option | Meaning |
+|--------|---------|
+| `-p PORT` | port to listen on (default is the built-in port) |
+| `-b ADDR` | bind to a specific address (default: all interfaces) |
+| `-v` | verbose logging |
+
+Make sure the chosen TCP port is open in the host's firewall.
+
+---
+
+## Using the client (`wld`)
+
+Both peers need the same **secret**. Tell the clients where the relay is either
+with options or with environment variables:
 
 ```sh
-# machine A (behind a firewall) — serve an interactive shell
-wld -g -l -i
-#   wld: generated secret: 7Kp9mXr... <- share this out-of-band
+export WLD_RELAY_HOST=relay.example.com   # or use -H on each command
+export WLD_RELAY_PORT=7440                # or use -p on each command
+```
 
-# machine B (anywhere) — log in
+If neither is set, `wld` uses `127.0.0.1` and the default port.
+
+### 1. Serve a shell from the machine behind the firewall
+
+```sh
+wld -g -l -i
+#   wld: generated secret: 7Kp9mXr...   <- share this out-of-band
+```
+
+- `-g` generates a strong random secret and prints it. Copy it and send it to
+  the other person through a channel you trust.
+- `-l` puts the client in listen mode.
+- `-i` serves an interactive shell over the tunnel.
+
+### 2. Connect from anywhere
+
+```sh
 wld -s 7Kp9mXr... -i
 ```
 
-More recipes:
+You now have an interactive shell on the first machine. Close it with the normal
+shell exit (`exit`).
+
+If the listener is not online yet, add `-w` so the client waits for it:
 
 ```sh
-# send a file                       # receive it
-wld -s SEC < movie.mkv              wld -s SEC -l > movie.mkv
-
-# run a command remotely, stream the result back
-wld -s SEC -l -e 'journalctl -n50'   # server side
-wld -s SEC                           # client side (prints the output)
-
-# pipe anything
-tar cz ./src | wld -s SEC           wld -s SEC -l | tar xzv
+wld -s 7Kp9mXr... -i -w
 ```
 
-| flag | meaning |
+### Other common uses
+
+Transfer a file (the sender reads stdin, the receiver writes stdout):
+
+```sh
+# receiver (behind firewall)          # sender (anywhere)
+wld -s SEC -l > movie.mkv             wld -s SEC < movie.mkv
+```
+
+Run a command remotely and get its output back:
+
+```sh
+# listener side
+wld -s SEC -l -e 'journalctl -n50'
+
+# client side (prints the output)
+wld -s SEC
+```
+
+Pipe anything through the tunnel:
+
+```sh
+# sending a directory
+tar cz ./src | wld -s SEC
+# receiving it
+wld -s SEC -l | tar xzv
+```
+
+Keep the secret out of the shell history by reading it from a file:
+
+```sh
+wld -k ~/.wld-secret -i        # first line of the file is the secret
+```
+
+Rotate the meeting point on the relay every 10 minutes, so that the relay cannot
+link sessions by address over time:
+
+```sh
+wld -g -l -i -R 600            # listener
+wld -s SEC -i -R 600           # connector
+```
+
+Both sides must use the same `-R` value and roughly synchronised clocks.
+
+---
+
+## Command reference
+
+| Flag | Meaning |
 |------|---------|
 | `-s SECRET` | shared secret (both peers must match) |
-| `-k FILE` | read the secret from a file |
-| `-g` | generate a secret, print it, use it |
+| `-k FILE` | read the secret from the first line of a file |
+| `-g` | generate a secret, print it and use it |
 | `-l` | listen mode (default is connect) |
-| `-i` | interactive PTY shell (listener serves it) |
-| `-e CMD` | run `CMD`, wire its stdio to the tunnel |
-| `-w` | (connect) wait for the listener to appear |
+| `-i` | interactive PTY shell (the listener serves it) |
+| `-e CMD` | run `CMD` and wire its stdin/stdout to the tunnel |
+| `-w` | (connect) wait until the listener appears |
 | `-R SECS` | rotate the rendezvous address every `SECS` seconds |
-| `-H` / `-p` | relay host / port |
-| `-v` | verbose |
+| `-H HOST` | relay host (env: `WLD_RELAY_HOST`, default `127.0.0.1`) |
+| `-p PORT` | relay port (env: `WLD_RELAY_PORT`) |
+| `-v` | verbose output |
+| `-h` | show usage |
+
+Typical combinations:
+
+| Goal | Listener | Connector |
+|------|----------|-----------|
+| Shell | `wld -g -l -i` | `wld -s SEC -i` |
+| Send a file | `wld -s SEC -l > out` | `wld -s SEC < in` |
+| Remote command | `wld -s SEC -l -e CMD` | `wld -s SEC` |
+
+Add `-w` on the connector side to wait until the listener is online.
 
 ---
 
 ## How it works
 
-1. **Derivation.** Both peers run the secret through a keyed-BLAKE2b KDF with
-   domain-separated salts to get three independent values:
-   - a 16-byte **rendezvous address** (where they meet on the relay),
-   - a 32-byte **PSK** (authenticates the end-to-end handshake),
-   - a 16-byte **ownership token** (protects the listen slot).
-2. **Rendezvous.** The listener registers its address at the relay; the
-   connector asks for the same address. The relay pairs them and splices their
-   TCP streams. It learns the address, nothing else.
-3. **Handshake.** Over the spliced pipe the peers run a
-   [Noise-`NNpsk0`](https://noiseprotocol.org/noise.html)-style authenticated key
-   exchange: ephemeral X25519 Diffie-Hellman mixed with the PSK, then explicit
-   key confirmation. An eavesdropper (including the relay) can't derive the keys;
-   an active man-in-the-middle without the secret fails the confirmation and both
-   ends abort.
-4. **Transport.** Everything after that is XChaCha20-Poly1305 records with
-   per-direction 64-bit nonce counters and length-prefixed framing. Clean
-   half-close is honored so pipes and `-e` commands see EOF correctly.
+1. **Key derivation.** Both peers run the secret through a keyed BLAKE2b key
+   derivation function, with a different label for each purpose. This produces
+   three independent values:
+   - a 16-byte **rendezvous address**: where the peers meet on the relay;
+   - a 32-byte **pre-shared key (PSK)**: used to authenticate the handshake;
+   - a 16-byte **ownership token**: protects the listening slot on the relay.
+2. **Rendezvous.** The listener registers its rendezvous address with the relay.
+   The connector asks for the same address. The relay pairs the two connections
+   and forwards bytes between them. The relay learns the address and nothing else.
+3. **Handshake.** Over the connected pipe, the peers perform an authenticated key
+   exchange: an ephemeral X25519 Diffie-Hellman exchange mixed with the PSK,
+   followed by explicit key confirmation. Anyone who does not know the secret,
+   including the relay, cannot derive the session keys. An active attacker who
+   does not know the secret fails the confirmation, and both ends abort.
+4. **Transport.** Everything after that is sent as XChaCha20-Poly1305 encrypted
+   records, with a 64-bit nonce counter per direction and length-prefixed
+   framing. Half-close is supported, so pipes and `-e` commands see end-of-file
+   correctly.
 
 ---
 
-## What I changed vs. gsocket
-
-I studied the gsocket source (its GSRN protocol, SRP/TLS layer, address
-derivation and `gs-netcat` tooling) and rebuilt the concept with these
-**deliberate differences**:
-
-### 1. Modern crypto instead of TLS-SRP  *(the big one)*
-gsocket negotiates end-to-end security with OpenSSL **TLS-SRP**
-(`SRP-AES-256-CBC-SHA`, a 4096-bit prime, CBC mode). That family is **deprecated
-and being removed from modern TLS/OpenSSL**, uses a non-AEAD CBC cipher, and the
-big finite-field DH is slow.
-
-wetland uses a **Noise-`NNpsk0`-style** exchange:
-- **X25519** ephemeral DH — fast, modern, constant-time.
-- **XChaCha20-Poly1305** AEAD transport — authenticated encryption, no padding
-  oracles.
-- A **keyed-BLAKE2b** key schedule with a hashed transcript + **explicit key
-  confirmation** for mutual authentication and MITM detection.
-- **Forward secrecy** from the ephemeral keys: recording traffic and later
-  learning the secret still doesn't decrypt past sessions.
-
-### 2. A relay you can actually run
-gsocket's GSRN is a closed, hosted service; the repo ships no relay. wetland
-includes **`wetland-relay`** — a single-file, `poll(2)`-based, dependency-light
-rendezvous server. You self-host it, so the whole system is testable end-to-end
-on one box and you never depend on someone else's infrastructure.
-
-### 3. Tracking-resistant, rotating addresses
-gsocket's rendezvous address is a **static** hash of the secret, so a
-relay-side observer can correlate every session that ever uses that secret.
-wetland can derive the address from `HKDF(secret, time-epoch)` (`-R SECS`), so
-the meeting point **rotates over time** while the secret stays the same. The
-connector probes neighbouring epochs to tolerate clock skew.
-
-### 4. Cleaner framing
-gsocket multiplexes control and data in-band using a `0xFB` **escape byte**
-scheme. wetland uses straightforward **length-prefixed AEAD records** and a tiny
-fixed relay-control vocabulary — simpler to reason about and to audit.
-
-### What I kept
-The core insight is gsocket's and it's a good one: *stop thinking about IPs and
-ports; two programs that share a secret should just be able to talk.* wetland
-keeps the secret-as-address model, the listener/connector roles, the ownership
-token idea, and the "netcat on steroids" ergonomics.
-
----
-
-## Security notes & threat model
+## Security notes
 
 - **The relay is untrusted** for confidentiality and integrity. It sees the
-  rendezvous address and ciphertext only. It *can* deny service (it's the meeting
-  point) and, without address rotation, correlate sessions by address.
+  rendezvous address and ciphertext only. It *can* deny service (it is the
+  meeting point) and, without address rotation (`-R`), it can correlate sessions
+  by address.
 - **Secret strength matters.** The address and PSK are only as strong as the
-  secret. `-g` generates ~119 bits; don't hand-pick short secrets.
-- **Key confirmation** rejects a wrong secret or an active MITM before any
-  application data flows.
-- This is **independent, unaudited** software. The crypto is built from
-  well-known primitives and a standard pattern, but it has not had a third-party
-  review. Don't guard lives with it.
+  secret. `-g` generates about 119 bits of randomness; do not hand-pick short
+  secrets.
+- **Forward secrecy.** The ephemeral keys mean that recorded traffic cannot be
+  decrypted later, even if the secret is learned afterwards.
+- **Key confirmation** rejects a wrong secret or an active man-in-the-middle
+  before any application data flows.
+- This is **independent, unaudited** software. It has not had a third-party
+  review. Do not rely on it where safety or lives depend on it.
 
-See [`docs/PROTOCOL.md`](docs/PROTOCOL.md) for the wire format and key schedule.
-
----
-
-## Project layout
-
-```
-src/wld_crypto.{c,h}   secret derivation, Noise handshake, AEAD   (the core)
-src/wld_tunnel.{c,h}   non-blocking encrypted I/O pump
-src/wld_net.{c,h}      socket helpers
-src/wld_proto.h        relay wire protocol + framing constants
-src/relay.c            wetland-relay — the rendezvous server
-src/client.c           wld — the client (pipe / exec / PTY modes)
-tests/                 crypto unit tests + end-to-end shell test
-```
-
-Build needs only a **C11 compiler** — there is no external library dependency
-(all crypto is the vendored Monocypher in `src/monocypher/`).
+The wire format and key schedule are described in
+[`docs/PROTOCOL.md`](docs/PROTOCOL.md).
 
 ---
 
-## Building for Linux, macOS and Windows
-
-Because there are no external dependencies, every target builds from the same
-sources:
-
-```sh
-make                 # native build (Linux or macOS) -> ./bin
-make windows         # cross-build Windows .exe (needs mingw-w64) -> ./dist/windows
-```
+## Platform support
 
 | Platform | Relay | Client pipe / file transfer | Client exec (`-e`) / PTY shell (`-i`) |
 |----------|:-----:|:---------------------------:|:-------------------------------------:|
 | Linux    | ✅ | ✅ | ✅ |
 | macOS    | ✅ | ✅ | ✅ |
-| Windows  | ✅ | ✅ | ⛔ (needs a PTY/fork — use WSL for now) |
+| Windows  | ✅ | ✅ | ⛔ (use WSL for now) |
 
-On Windows the client uses a thread-based I/O pump (WSAPoll can't watch the
-console), so pipe mode and file transfer work; the interactive PTY shell and
-`-e` command execution on the *listener* are POSIX-only for now. The CI workflow
-(`.github/workflows/build.yml`) builds and tests on all three OSes and uploads
-binaries as artifacts.
+On Windows the client uses a thread-based I/O loop, because the console cannot
+be watched with `WSAPoll`. Pipe mode and file transfer therefore work, but the
+interactive PTY shell and `-e` command execution on the listening side are
+POSIX-only for now.
+
+---
+
+## Project layout and tests
+
+```
+src/wld_crypto.{c,h}   secret derivation, handshake, AEAD (the core)
+src/wld_tunnel.{c,h}   non-blocking encrypted I/O loop
+src/wld_net.{c,h}      socket helpers
+src/wld_proto.h        relay wire protocol and framing constants
+src/relay.c            wetland-relay: the rendezvous server
+src/client.c           wld: the client (pipe, exec and PTY modes)
+src/monocypher/        bundled cryptographic code
+tests/                 crypto unit tests and end-to-end shell test
+docs/PROTOCOL.md       wire format and key schedule
+```
+
+Run the tests with:
+
+```sh
+make test
+```
+
+This runs the crypto unit tests and an end-to-end test that starts a relay and
+two clients on localhost.
+
+The CI workflow (`.github/workflows/build.yml`) builds and tests on Linux,
+macOS and Windows, and uploads the binaries as artifacts.
+
+---
 
 ## Roadmap
 
-Not yet implemented (contributions welcome): SOCKS5 proxy mode, multi-connection
-TCP port-forwarding, terminal window-size (`SIGWINCH`) propagation, Tor/SOCKS
-egress to the relay, multi-relay load distribution, and daemon/background mode.
+Not yet implemented:
 
-## Credits
+- SOCKS5 proxy mode
+- multi-connection TCP port forwarding
+- propagation of terminal window size (`SIGWINCH`)
+- Tor/SOCKS egress to the relay
+- multiple relays with load distribution
+- daemon / background mode
 
-- End-to-end crypto uses [Monocypher](https://monocypher.org/) by Loup Vaillant
-  (vendored in `src/monocypher/`, BSD-2-Clause OR CC0-1.0).
-- Inspired by [THC's gsocket](https://github.com/hackerschoice/gsocket).
+Contributions are welcome.
+
+---
 
 ## License
 
-BSD-2-Clause. See [`LICENSE`](LICENSE). The vendored Monocypher keeps its own
-(compatible) licence header.
+BSD-2-Clause. See [`LICENSE`](LICENSE).
