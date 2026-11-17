@@ -40,10 +40,11 @@ The project is written in C with **no external dependencies**, and builds for
 7. [How it works](#how-it-works)
 8. [Security notes](#security-notes)
 9. [Purple-team lab (`wld lab`)](#purple-team-lab-wld-lab)
-10. [Platform support](#platform-support)
-11. [Project layout and tests](#project-layout-and-tests)
-12. [Roadmap](#roadmap)
-13. [License](#license)
+10. [Troubleshooting](#troubleshooting)
+11. [Platform support](#platform-support)
+12. [Project layout and tests](#project-layout-and-tests)
+13. [Roadmap](#roadmap)
+14. [License](#license)
 
 ---
 
@@ -338,6 +339,94 @@ wld uninstall
 > module is built to be *detected*, not to hide — a poor base for a real implant,
 > by design. Full ATT&CK → detection guidance for blue team:
 > [`docs/PURPLE-LAB.md`](docs/PURPLE-LAB.md).
+
+---
+
+## Troubleshooting
+
+### `wld: no peer is listening (try -w to wait)`
+
+The connector reached the relay but found no listener at its rendezvous address.
+In order of likelihood:
+
+1. **The two sides are not pointing at the same relay.** This is the most common
+   mistake. With no `-H`/`-p` and no `WLD_RELAY_HOST`/`WLD_RELAY_PORT`, `wld`
+   defaults to `127.0.0.1` — so each machine looks at *its own* localhost and they
+   never meet. Point **both** sides at the same reachable relay:
+   ```sh
+   export WLD_RELAY_HOST=relay.example.com WLD_RELAY_PORT=7440   # on BOTH machines
+   ```
+2. **The secret does not match.** The rendezvous address is derived from the
+   secret, so a wrong secret means the peers land on different addresses and look
+   exactly like "nobody is listening". Double-check `-s` on both sides (watch for
+   trailing spaces / shell quoting). Prefer `-g` on the listener and copy the
+   printed secret verbatim.
+3. **The listener is not up yet, or is not actually listening.** Start the
+   listener with `-l` *before* the connector, or add `-w` to the connector so it
+   waits.
+4. **Mismatched `-R`.** If one side rotates the address (`-R SECS`) the other must
+   use the same value, with roughly synchronised clocks.
+
+> Tip: run both sides with `-v` — the verbose log shows the relay it used and the
+> rendezvous attempts.
+
+### `wld: cannot reach relay HOST:PORT: Connection refused` (or a timeout)
+
+The relay itself is unreachable:
+
+- The relay process is not running — start `wetland-relay -p 7440 -v` on the host.
+- Wrong host/port — confirm `-H`/`-p` (or the env vars) match the relay.
+- A firewall is blocking the port. On a cloud VM you often have **two** layers:
+  the provider's security group **and** the host firewall. Example on Oracle
+  Cloud:
+  ```sh
+  # 1) open the port in the VCN Security List (ingress TCP 7440 from 0.0.0.0/0)
+  # 2) open it on the host too:
+  sudo iptables -I INPUT -p tcp --dport 7440 -j ACCEPT && sudo netfilter-persistent save
+  ```
+
+### `wld: handshake failed: wrong secret or active MITM (connection refused)`
+
+The peers *did* meet but the end-to-end key confirmation failed — almost always a
+secret mismatch (rare address collisions aside). Re-check the secret on both ends.
+This is a safety feature: no data flows until both sides prove they share the
+secret.
+
+### `wld: relay pool is empty` (with `-x`)
+
+`-x` has no relays to choose from. Populate the pool:
+```sh
+export WLD_RELAY_POOL="relay1.example.net:7440,relay2.example.net,203.0.113.7:9000"
+```
+See [Public relay pool](#public-relay-pool--x).
+
+### The interactive shell (`-i`) does nothing / looks frozen
+
+`-i` needs a **real terminal** on both sides. It won't behave in a pipe, a CI job
+or a non-TTY context. For scripted/non-interactive use, use `-e CMD` or plain pipe
+mode instead.
+
+### Build & install
+
+- **`make: x86_64-w64-mingw32-gcc: No such file or directory`** — the Windows
+  cross-compiler is missing. Install it (Debian/Ubuntu/Cloud Shell):
+  ```sh
+  sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+  ```
+  You only need this for `make windows`; the native Linux/macOS build does not.
+- **`make: Nothing to be done for 'all'`** — not an error; the binaries are
+  already up to date. Force a rebuild with `make clean && make`.
+- **`install: cannot create regular file '/usr/local/bin/wld': Permission
+  denied`** — use `sudo make install`, or install into a user-writable prefix:
+  ```sh
+  make install PREFIX=$HOME/.local        # then ensure ~/.local/bin is on PATH
+  ```
+
+### Windows: `-i` / `-e` on the listener don't work
+
+Interactive shells and listener-side command execution need a PTY/`fork`, which
+the Windows build does not have yet. Pipe mode and file transfer work; use WSL for
+the rest (see [Platform support](#platform-support)).
 
 ---
 
