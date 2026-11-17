@@ -424,7 +424,7 @@ main(int argc, char **argv)
 		for (int i = 0; i < n; i++) {
 			if (pfds[i].revents == 0)
 				continue;
-			if (pfds[i].fd == lfd) {
+			if (pfds[i].fd == (SOCKET_CAST)lfd) {
 				accept_new(lfd);
 				continue;
 			}
