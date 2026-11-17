@@ -38,7 +38,7 @@ endif
 
 MONO       = src/monocypher/monocypher.c
 COMMON_SRC = src/wld_crypto.c src/wld_net.c $(MONO)
-CLIENT_SRC = src/client.c src/wld_tunnel.c $(COMMON_SRC)
+CLIENT_SRC = src/client.c src/wld_tunnel.c src/wld_lab.c $(COMMON_SRC)
 RELAY_SRC  = src/relay.c $(COMMON_SRC)
 
 BIN = bin/wld bin/wetland-relay
@@ -62,6 +62,7 @@ bin/test_crypto: tests/test_crypto.c $(COMMON_SRC) | bin
 test: all bin/test_crypto
 	./bin/test_crypto
 	./tests/test_e2e.sh
+	./tests/test_lab.sh
 
 # --- Windows cross-compile (mingw-w64) ---
 MINGW ?= x86_64-w64-mingw32-gcc

@@ -36,12 +36,14 @@ The project is written in C with **no external dependencies**, and builds for
 3. [Running your own relay](#running-your-own-relay)
 4. [Using the client (`wld`)](#using-the-client-wld)
 5. [Command reference](#command-reference)
-6. [How it works](#how-it-works)
-7. [Security notes](#security-notes)
-8. [Platform support](#platform-support)
-9. [Project layout and tests](#project-layout-and-tests)
-10. [Roadmap](#roadmap)
-11. [License](#license)
+6. [Public relay pool (`-x`)](#public-relay-pool--x)
+7. [How it works](#how-it-works)
+8. [Security notes](#security-notes)
+9. [Purple-team lab (`wld lab`)](#purple-team-lab-wld-lab)
+10. [Platform support](#platform-support)
+11. [Project layout and tests](#project-layout-and-tests)
+12. [Roadmap](#roadmap)
+13. [License](#license)
 
 ---
 
@@ -215,6 +217,7 @@ Both sides must use the same `-R` value and roughly synchronised clocks.
 | `-R SECS` | rotate the rendezvous address every `SECS` seconds |
 | `-H HOST` | relay host (env: `WLD_RELAY_HOST`, default `127.0.0.1`) |
 | `-p PORT` | relay port (env: `WLD_RELAY_PORT`) |
+| `-x` | pick a relay from the pool `WLD_RELAY_POOL`, chosen from the secret (see [Public relay pool](#public-relay-pool--x)) |
 | `-v` | verbose output |
 | `-h` | show usage |
 
@@ -227,6 +230,38 @@ Typical combinations:
 | Remote command | `wld -s SEC -l -e CMD` | `wld -s SEC` |
 
 Add `-w` on the connector side to wait until the listener is online.
+
+`wld` also has a separate `lab` subcommand for authorized purple-team detection
+testing — see [Purple-team lab](#purple-team-lab-wld-lab).
+
+---
+
+## Public relay pool (`-x`)
+
+Don't want to pass `-H` every time? With `-x`, `wld` picks a relay from a pool
+for you. The choice is **derived from the shared secret**, so both peers land on
+the *same* relay automatically — no extra coordination:
+
+```sh
+export WLD_RELAY_POOL="relay1.example.net:7440,relay2.example.net,203.0.113.7:9000"
+
+wld -s SECRET -x -l -i      # serve a shell via a pool relay
+wld -s SECRET -x -i         # connect — same secret → same relay
+```
+
+Entries are `host` (uses the default port) or `host:port`, comma-separated. A
+given secret always maps to the same entry; different secrets spread across the
+pool.
+
+> **There is no official public wetland relay.** The relay speaks wetland's own
+> protocol, so a "public relay" is just a host running `wetland-relay`. You
+> populate the pool yourself (or share one with your group). The relay is blind
+> — it only ever sees a 16-byte rendezvous address and ciphertext — so running
+> or using a shared one leaks nothing about your traffic. Free ways to stand one
+> up: an always-free VM (Oracle Cloud, Google Cloud `e2-micro`, AWS
+> free tier), or a small PaaS instance (Fly.io, Render, Railway) exposing TCP
+> port 7440. You can also hard-code a default pool into `builtin_pool[]` in
+> `src/client.c` if you ship your own binaries.
 
 ---
 
@@ -274,6 +309,38 @@ The wire format and key schedule are described in
 
 ---
 
+## Purple-team lab (`wld lab`)
+
+For **detection engineering in an authorized lab**, `wld lab` ships documented,
+reversible simulations of common evasion/persistence TTPs (Atomic-Red-Team
+style). Every technique is deliberately *loud*, tags its artifacts `WETLAND-LAB`,
+prints an ATT&CK-mapped detection hint, and is undone by `wld lab uninstall`.
+
+```sh
+wld lab masquerade --name "[kworker/0:0]"   # T1036  process name spoofing
+wld lab persist --method both                # T1053.003 / T1543.002
+wld lab hide --reference /bin/ls             # T1564.001 / T1070.006
+wld lab beacon --to host:443 --interval 30   # T1071 / T1573 (not real TLS)
+wld lab detections                           # print the full detection mapping
+wld lab uninstall                            # remove every WETLAND-LAB artifact
+```
+
+Each technique also has a **shortcut** — drop the `lab` word and call it
+directly:
+
+```sh
+wld persist --method both      # same as `wld lab persist --method both`
+wld masquerade --name "[kworker/0:0]"
+wld uninstall
+```
+
+> ⚠️ Authorized testing only, on systems you own or are cleared to test. The
+> module is built to be *detected*, not to hide — a poor base for a real implant,
+> by design. Full ATT&CK → detection guidance for blue team:
+> [`docs/PURPLE-LAB.md`](docs/PURPLE-LAB.md).
+
+---
+
 ## Platform support
 
 | Platform | Relay | Client pipe / file transfer | Client exec (`-e`) / PTY shell (`-i`) |
@@ -298,9 +365,11 @@ src/wld_net.{c,h}      socket helpers
 src/wld_proto.h        relay wire protocol and framing constants
 src/relay.c            wetland-relay: the rendezvous server
 src/client.c           wld: the client (pipe, exec and PTY modes)
+src/wld_lab.{c,h}      purple-team lab: documented, reversible TTP sims
 src/monocypher/        bundled cryptographic code
-tests/                 crypto unit tests and end-to-end shell test
+tests/                 crypto unit tests, end-to-end and lab smoke tests
 docs/PROTOCOL.md       wire format and key schedule
+docs/PURPLE-LAB.md     purple-team lab: ATT&CK -> detection mapping
 ```
 
 Run the tests with:
@@ -309,8 +378,8 @@ Run the tests with:
 make test
 ```
 
-This runs the crypto unit tests and an end-to-end test that starts a relay and
-two clients on localhost.
+This runs the crypto unit tests, an end-to-end test that starts a relay and two
+clients on localhost, and a smoke test of the `wld lab` techniques.
 
 The CI workflow (`.github/workflows/build.yml`) builds and tests on Linux,
 macOS and Windows, and uploads the binaries as artifacts.
@@ -319,13 +388,16 @@ macOS and Windows, and uploads the binaries as artifacts.
 
 ## Roadmap
 
+Done since the first version: a secret-derived **public relay pool** (`-x`) for
+relay diversity, and a **purple-team lab** module (`wld lab`).
+
 Not yet implemented:
 
 - SOCKS5 proxy mode
 - multi-connection TCP port forwarding
 - propagation of terminal window size (`SIGWINCH`)
 - Tor/SOCKS egress to the relay
-- multiple relays with load distribution
+- relay-pool health-checking and failover
 - daemon / background mode
 
 Contributions are welcome.

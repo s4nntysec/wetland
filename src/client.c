@@ -14,6 +14,7 @@
 #include "wld_net.h"
 #include "wld_crypto.h"
 #include "wld_tunnel.h"
+#include "wld_lab.h"
 
 #include "wld_compat.h"
 
@@ -234,6 +235,94 @@ mode_pty_client(int tun, wld_session *sess)
 
 #endif /* !_WIN32 */
 
+/* ---- public relay pool -------------------------------------------------- */
+/*
+ * There is no public wetland relay infrastructure: the relay speaks a custom
+ * protocol, so a "public relay" is just someone running wetland-relay on a
+ * reachable host. Populate the pool with your own (or a community's) relays
+ * through the WLD_RELAY_POOL environment variable:
+ *
+ *     export WLD_RELAY_POOL="relay1.example.net:7440,relay2.example.net,203.0.113.7:9000"
+ *
+ * Entries are "host" (uses the default port) or "host:port", comma-separated.
+ * With -x, wld picks ONE entry for you; the index is derived from the shared
+ * secret, so both peers land on the same relay with no extra coordination.
+ */
+
+/* Built-in fallback pool. Empty by default — add relays you actually run. */
+static const char *const builtin_pool[] = {
+	/* "relay.example.net:7440", */
+	NULL
+};
+
+struct relay_entry { char host[256]; char port[16]; };
+
+/* Append "host" or "host:port" to a growing pool. Returns new count, or -1. */
+static int
+pool_add(struct relay_entry **pool, int n, const char *s, const char *defport)
+{
+	while (*s == ' ' || *s == '\t') s++;
+	if (*s == '\0') return n;
+
+	struct relay_entry *np = realloc(*pool, (size_t)(n + 1) * sizeof **pool);
+	if (np == NULL) return -1;
+	*pool = np;
+	struct relay_entry *e = &np[n];
+
+	/* Split host[:port]; skip a leading '[' for bracketed IPv6. */
+	const char *colon = strrchr(s, ':');
+	/* A ':' is a port separator only if what follows is all digits. */
+	if (colon != NULL) {
+		const char *d = colon + 1;
+		for (; *d; d++) if (*d < '0' || *d > '9') { colon = NULL; break; }
+		if (colon == colon + 1) colon = NULL; /* empty port */
+	}
+
+	size_t hlen = colon ? (size_t)(colon - s) : strlen(s);
+	while (hlen > 0 && (s[hlen-1] == ' ' || s[hlen-1] == '\t')) hlen--;
+	if (hlen == 0 || hlen >= sizeof e->host) return n; /* skip junk */
+	memcpy(e->host, s, hlen);
+	e->host[hlen] = '\0';
+
+	const char *p = colon ? colon + 1 : defport;
+	if (snprintf(e->port, sizeof e->port, "%s", p) >= (int)sizeof e->port)
+		return n;
+	return n + 1;
+}
+
+/* Build the relay pool from $WLD_RELAY_POOL, else the built-in list. */
+static int
+build_pool(struct relay_entry **pool, const char *defport)
+{
+	int n = 0;
+	*pool = NULL;
+	const char *env = getenv("WLD_RELAY_POOL");
+	if (env != NULL && env[0] != '\0') {
+		char *copy = strdup(env);
+		if (copy == NULL) return -1;
+		char *tok = copy;
+		for (char *q = copy; ; q++) {
+			if (*q == ',' || *q == '\0') {
+				int last = (*q == '\0');
+				*q = '\0';
+				int r = pool_add(pool, n, tok, defport);
+				if (r < 0) { free(copy); free(*pool); *pool = NULL; return -1; }
+				n = r;
+				tok = q + 1;
+				if (last) break;
+			}
+		}
+		free(copy);
+	} else {
+		for (int i = 0; builtin_pool[i] != NULL; i++) {
+			int r = pool_add(pool, n, builtin_pool[i], defport);
+			if (r < 0) { free(*pool); *pool = NULL; return -1; }
+			n = r;
+		}
+	}
+	return n;
+}
+
 /* ---- main --------------------------------------------------------------- */
 
 static void
@@ -253,6 +342,8 @@ usage(const char *p)
 "  -R SECS     rotate the rendezvous address every SECS seconds\n"
 "  -H HOST     relay host (default: $WLD_RELAY_HOST or 127.0.0.1)\n"
 "  -p PORT     relay port (default: $WLD_RELAY_PORT or %s)\n"
+"  -x          pick a public relay from the pool ($WLD_RELAY_POOL),\n"
+"              chosen deterministically from the secret (both peers agree)\n"
 "  -v          verbose\n"
 "\n"
 "examples:\n"
@@ -267,14 +358,20 @@ usage(const char *p)
 int
 main(int argc, char **argv)
 {
+	/* Purple-team lab: `wld lab <technique> ...` or the `wld <technique> ...`
+	 * shortcut (e.g. `wld persist`). Isolated from the tunnel path. */
+	if (argc >= 2 && wld_lab_is_command(argv[1]))
+		return wld_lab_main(argc, argv);
+
 	const char *secret = NULL, *secret_file = NULL, *cmd = NULL;
 	int listen_mode = 0, interactive = 0, do_gen = 0, wait_flag = 0;
+	int use_pool = 0;
 	long epoch_secs = 0;
 	const char *host = getenv("WLD_RELAY_HOST");
 	const char *port = getenv("WLD_RELAY_PORT");
 	int opt;
 
-	while ((opt = getopt(argc, argv, "s:k:gliwe:R:H:p:vh")) != -1) {
+	while ((opt = getopt(argc, argv, "s:k:gliwe:R:H:p:xvh")) != -1) {
 		switch (opt) {
 		case 's': secret = optarg; break;
 		case 'k': secret_file = optarg; break;
@@ -286,6 +383,7 @@ main(int argc, char **argv)
 		case 'R': epoch_secs = atol(optarg); break;
 		case 'H': host = optarg; break;
 		case 'p': port = optarg; break;
+		case 'x': use_pool = 1; break;
 		case 'v': g_verbose = 1; break;
 		case 'h':
 		default: usage(argv[0]);
@@ -317,6 +415,31 @@ main(int argc, char **argv)
 	}
 	if (secret == NULL || secret[0] == '\0')
 		die("no secret given (use -s, -k or -g)");
+
+	/*
+	 * Public relay pool: pick one relay deterministically from the secret so
+	 * both peers meet on the same host without extra coordination. Selection
+	 * is derived at epoch 0 so it stays fixed even when -R rotates addresses.
+	 */
+	struct relay_entry *pool = NULL;
+	if (use_pool) {
+		int npool = build_pool(&pool, port);
+		if (npool < 0)
+			die("out of memory building relay pool");
+		if (npool == 0)
+			die("relay pool is empty: set WLD_RELAY_POOL=\"host:port,...\" "
+			    "(or build your own relay list into the binary)");
+		uint8_t sel[WLD_ADDR_LEN];
+		if (wld_derive(secret, 0, sel, NULL, NULL) != 0)
+			die("key derivation failed");
+		uint64_t v = 0;
+		for (int i = 0; i < 8; i++) v = (v << 8) | sel[i];
+		int idx = (int)(v % (uint64_t)npool);
+		host = pool[idx].host;
+		port = pool[idx].port;
+		VLOG("wld: public relay %d/%d -> %s:%s\n",
+		    idx + 1, npool, host, port);
+	}
 
 	/* epoch for rotating addresses (0 = static) */
 	uint64_t epoch0 = 0;
