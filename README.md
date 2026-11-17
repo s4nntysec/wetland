@@ -37,14 +37,15 @@ The project is written in C with **no external dependencies**, and builds for
 4. [Using the client (`wld`)](#using-the-client-wld)
 5. [Command reference](#command-reference)
 6. [Public relay pool (`-x`)](#public-relay-pool--x)
-7. [How it works](#how-it-works)
-8. [Security notes](#security-notes)
-9. [Purple-team lab (`wld lab`)](#purple-team-lab-wld-lab)
-10. [Troubleshooting](#troubleshooting)
-11. [Platform support](#platform-support)
-12. [Project layout and tests](#project-layout-and-tests)
-13. [Roadmap](#roadmap)
-14. [License](#license)
+7. [Zero-config tunnel (bore.pub)](#zero-config-tunnel-borepub)
+8. [How it works](#how-it-works)
+9. [Security notes](#security-notes)
+10. [Purple-team lab (`wld lab`)](#purple-team-lab-wld-lab)
+11. [Troubleshooting](#troubleshooting)
+12. [Platform support](#platform-support)
+13. [Project layout and tests](#project-layout-and-tests)
+14. [Roadmap](#roadmap)
+15. [License](#license)
 
 ---
 
@@ -266,6 +267,48 @@ pool.
 
 ---
 
+## Zero-config tunnel (bore.pub)
+
+If you run a **listener** (`-l`) with **no relay configured** (no `-H`, no `-x`,
+no `$WLD_RELAY_HOST`) and nothing is already listening on the default relay port,
+`wld` bootstraps everything itself:
+
+1. starts a **relay in-process** (on `127.0.0.1`, an ephemeral port), and
+2. exposes it through a **[bore](https://github.com/ekzhang/bore) reverse tunnel**
+   to the public `bore.pub` server,
+
+then prints the exact command for the other side:
+
+```sh
+$ wld -g -l -i
+wld: generated secret: 7Kp9mXr...
+wld: no relay configured — starting embedded relay + bore.pub tunnel...
+wld: tunnel up at bore.pub:43187 — the other side runs:
+       wld -s <secret> -H bore.pub -p 43187 -i
+```
+
+The connector just runs that line. No VPS, no port forwarding, no relay setup.
+The relay is still **blind** (sees only the 16-byte address + ciphertext), and
+the end-to-end encryption is unchanged — bore only moves bytes.
+
+**Self-hosting bore:** point the tunnel at your own bore server instead of
+`bore.pub` with `WLD_BORE_HOST` (and `WLD_BORE_PORT`, default `7835`):
+
+```sh
+export WLD_BORE_HOST=bore.example.com      # your `bore server`
+wld -g -l -i
+```
+
+Notes:
+- The embedded relay and tunnel run in background threads of the listener
+  process; on a one-shot pipe send (`wld -l < file`) `wld` waits for the
+  transfer to drain before exiting.
+- Needs outbound TCP to the bore server's control port (`7835`). If it can't be
+  reached, `wld` falls back to a **local-only** relay and says so.
+- POSIX only (Linux/macOS); on Windows, pass a relay with `-H`/`-x`.
+
+---
+
 ## How it works
 
 1. **Key derivation.** Both peers run the secret through a keyed BLAKE2b key
@@ -452,11 +495,13 @@ src/wld_crypto.{c,h}   secret derivation, handshake, AEAD (the core)
 src/wld_tunnel.{c,h}   non-blocking encrypted I/O loop
 src/wld_net.{c,h}      socket helpers
 src/wld_proto.h        relay wire protocol and framing constants
-src/relay.c            wetland-relay: the rendezvous server
+src/wld_relay.{c,h}    embeddable relay core (serve loop)
+src/relay.c            wetland-relay: thin CLI wrapper around the core
+src/wld_bore.{c,h}     bore-style reverse-tunnel client (zero-config listener)
 src/client.c           wld: the client (pipe, exec and PTY modes)
 src/wld_lab.{c,h}      purple-team lab: documented, reversible TTP sims
 src/monocypher/        bundled cryptographic code
-tests/                 crypto unit tests, end-to-end and lab smoke tests
+tests/                 crypto unit, end-to-end, lab and bore tunnel tests
 docs/PROTOCOL.md       wire format and key schedule
 docs/PURPLE-LAB.md     purple-team lab: ATT&CK -> detection mapping
 ```
@@ -468,7 +513,8 @@ make test
 ```
 
 This runs the crypto unit tests, an end-to-end test that starts a relay and two
-clients on localhost, and a smoke test of the `wld lab` techniques.
+clients on localhost, a smoke test of the `wld lab` techniques, and a bore
+auto-tunnel test against a local stand-in bore server.
 
 The CI workflow (`.github/workflows/build.yml`) builds and tests on Linux,
 macOS and Windows, and uploads the binaries as artifacts.
@@ -477,8 +523,9 @@ macOS and Windows, and uploads the binaries as artifacts.
 
 ## Roadmap
 
-Done since the first version: a secret-derived **public relay pool** (`-x`) for
-relay diversity, and a **purple-team lab** module (`wld lab`).
+Done since the first version: a secret-derived **public relay pool** (`-x`), a
+**zero-config bore.pub tunnel** for NAT'd listeners, and a **purple-team lab**
+module (`wld lab`).
 
 Not yet implemented:
 

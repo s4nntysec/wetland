@@ -15,6 +15,7 @@
 #include "wld_crypto.h"
 #include "wld_tunnel.h"
 #include "wld_lab.h"
+#include "wld_bore.h"
 
 #include "wld_compat.h"
 
@@ -346,6 +347,10 @@ usage(const char *p)
 "              chosen deterministically from the secret (both peers agree)\n"
 "  -v          verbose\n"
 "\n"
+"zero-config listener: with -l and no relay set (no -H/-x/$WLD_RELAY_HOST)\n"
+"and nothing on the default relay port, wld starts an embedded relay and a\n"
+"bore.pub reverse tunnel, then prints the -H/-p line for the other side.\n"
+"\n"
 "examples:\n"
 "  wld -g -l -i                 # serve a shell, prints the secret to share\n"
 "  wld -s <secret> -i           # log into that shell from anywhere\n"
@@ -369,6 +374,7 @@ main(int argc, char **argv)
 	long epoch_secs = 0;
 	const char *host = getenv("WLD_RELAY_HOST");
 	const char *port = getenv("WLD_RELAY_PORT");
+	int relay_specified = (host != NULL);
 	int opt;
 
 	while ((opt = getopt(argc, argv, "s:k:gliwe:R:H:p:xvh")) != -1) {
@@ -381,9 +387,9 @@ main(int argc, char **argv)
 		case 'w': wait_flag = 1; break;
 		case 'e': cmd = optarg; break;
 		case 'R': epoch_secs = atol(optarg); break;
-		case 'H': host = optarg; break;
+		case 'H': host = optarg; relay_specified = 1; break;
 		case 'p': port = optarg; break;
-		case 'x': use_pool = 1; break;
+		case 'x': use_pool = 1; relay_specified = 1; break;
 		case 'v': g_verbose = 1; break;
 		case 'h':
 		default: usage(argv[0]);
@@ -440,6 +446,54 @@ main(int argc, char **argv)
 		VLOG("wld: public relay %d/%d -> %s:%s\n",
 		    idx + 1, npool, host, port);
 	}
+
+#ifndef _WIN32
+	/*
+	 * Zero-config listener: if no relay was specified and nothing is already
+	 * running on the default relay address, spin up an in-process relay and
+	 * expose it through a bore.pub reverse tunnel (bore-style), so a listener
+	 * behind NAT is reachable without any manual relay setup.
+	 */
+	if (listen_mode && !use_pool && !relay_specified) {
+		int probe = wld_tcp_connect(host, port);
+		if (probe >= 0) {
+			wld_closesocket(probe);
+			VLOG("wld: using relay already running at %s:%s\n", host, port);
+		} else {
+			/* deterministic public port request (best-effort) from the secret */
+			uint8_t sel[WLD_ADDR_LEN];
+			wld_derive(secret, 0, sel, NULL, NULL);
+			uint64_t v = 0;
+			for (int i = 0; i < 8; i++) v = (v << 8) | sel[i];
+			int req = 1024 + (int)(v % 64000);
+
+			static char lport[16], pubhost[256];
+			int pubport = 0;
+			const char *bore_host = getenv("WLD_BORE_HOST"); /* NULL = bore.pub */
+			fprintf(stderr, "wld: no relay configured — starting embedded "
+			    "relay + %s tunnel...\n", bore_host ? bore_host : "bore.pub");
+			int r = wld_bore_autotunnel(bore_host, req, g_verbose,
+			    lport, sizeof lport, pubhost, sizeof pubhost, &pubport);
+			if (r == 0) {
+				host = "127.0.0.1";
+				port = lport;
+				fprintf(stderr,
+				    "wld: tunnel up at %s:%d — the other side runs:\n"
+				    "       wld -s <secret> -H %s -p %d%s\n",
+				    pubhost, pubport, pubhost, pubport,
+				    interactive ? " -i" : "");
+			} else if (lport[0] != '\0') {
+				host = "127.0.0.1";
+				port = lport;
+				fprintf(stderr, "wld: bore tunnel failed — relay is "
+				    "LOCAL-ONLY on 127.0.0.1:%s (same host/LAN). Use -H for "
+				    "a remote relay.\n", lport);
+			} else {
+				die("auto relay/tunnel failed; run wetland-relay and pass -H/-p");
+			}
+		}
+	}
+#endif
 
 	/* epoch for rotating addresses (0 = static) */
 	uint64_t epoch0 = 0;
@@ -511,6 +565,11 @@ main(int argc, char **argv)
 #endif
 
 	wld_closesocket(tun);
+#ifndef _WIN32
+	/* If we auto-started a bore tunnel, let any in-flight proxied data finish
+	 * before the process (and its relay/proxy threads) exits. No-op otherwise. */
+	wld_bore_drain(10000);
+#endif
 	free(gen);
 	return rc == 0 ? 0 : 1;
 }
