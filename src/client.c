@@ -494,12 +494,13 @@ main(int argc, char **argv)
 				    g_verbose, lport, sizeof lport, pubhost, sizeof pubhost, &pubport);
 			} else {
 				/* default: bore public tunnel (no account, no host binary) */
-				const char *bore_host = getenv("WLD_BORE_HOST"); /* NULL = bore.pub */
-				uint8_t sel[WLD_ADDR_LEN];
-				wld_derive(secret, 0, sel, NULL, NULL);
-				uint64_t v = 0;
-				for (int i = 0; i < 8; i++) v = (v << 8) | sel[i];
-				int req = 1024 + (int)(v % 64000);
+				const char *bore_host  = getenv("WLD_BORE_HOST"); /* NULL = bore.pub */
+				const char *bore_rport = getenv("WLD_BORE_REMOTE_PORT");
+				/* Ask bore to CHOOSE the public port (0): a public server like
+				 * bore.pub rejects a specific port that is taken / out of range.
+				 * The assigned port is printed for the connector. Override only
+				 * for a private bore server that honours fixed ports. */
+				int req = (bore_rport && bore_rport[0]) ? atoi(bore_rport) : 0;
 				fprintf(stderr, "wld: no relay configured — embedded relay + "
 				    "%s tunnel...\n", bore_host ? bore_host : "bore.pub");
 				r = wld_bore_autotunnel(bore_host, req, g_verbose,

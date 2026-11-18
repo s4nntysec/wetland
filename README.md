@@ -326,14 +326,17 @@ wld -g -l -i      # -> prints: ... -H frp.example.com -p <port> ...
 | Variable | Meaning |
 |----------|---------|
 | `WLD_BORE_HOST` / `WLD_BORE_PORT` | bore server (default `bore.pub` / `7835`) |
+| `WLD_BORE_REMOTE_PORT` | fixed public port on a private bore server (default: bore chooses) |
 | `WLD_FRP_SERVER` | switch to frp; your frps host |
 | `WLD_FRP_PORT` | frps `bindPort` (default `7000`) |
 | `WLD_FRP_TOKEN` | frps `auth.token` (omit if none) |
 | `WLD_FRP_REMOTE_PORT` | fixed public port (default: derived from the secret) |
 
 Notes:
-- The public port is **derived from the secret** by default (same secret → same
-  port, subject to the server's allowed range).
+- **bore** lets the server **choose** the public port (public servers reject a
+  specific one that is taken / out of range) — `wld` prints the assigned port for
+  the connector. **frp** derives the port from the secret by default (your frps,
+  so you control the allowed range); pin either with `WLD_*_REMOTE_PORT`.
 - The embedded relay and tunnel run in background threads of the listener
   process; on a one-shot pipe send (`wld -l < file`) `wld` waits for the transfer
   to drain before exiting.
