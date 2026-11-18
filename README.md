@@ -425,12 +425,21 @@ Any `wld lab` technique also takes **`--tunnel`**, which opens the same
 zero-config public tunnel as `wld -l` (embedded relay + pinggy/bore/frp) and
 prints the public `host:port` before running the technique.
 
-`masquerade` and `beacon` also accept the listener flags **`-l` / `-i` / `-e CMD`**
-(plus `-s`/`-g`/`-H`/...), running a real listener via the client flow — e.g.
-`wld lab masquerade -g -l -i` is a masqueraded interactive shell listener, and
-`wld lab beacon --to c2:443 -g -l -i` serves while beaconing. `persist` and
-`hide` refuse `-l` (fusing persistence/hiding with a listener would be a covert
-backdoor — run them separately).
+**Every** technique also accepts the listener flags **`-l` / `-i` / `-e CMD`**
+(plus `-s`/`-k`/`-g`/`-H`/`-M`/...), running a real listener via the client flow —
+the same embedded relay + zero-config tunnel as `wld -l`. The technique's own
+`--long` flags still apply:
+
+- `wld lab masquerade -g -l -i` — shell listener shown under the fake name.
+- `wld lab beacon --to c2:443 -g -l -i` — listener plus a background C2 beacon.
+- `wld lab persist -s SEC -l -i` — shell listener **persisted across reboots**
+  (the listener persists itself; use `-s`/`-k`, not `-g`, for a stable secret).
+- `wld lab hide -s SEC -l -i` — shell listener served **from the hidden dot-file**
+  (`execv`'d from it, so `ps`/`/proc/pid/exe` point at the dot-file).
+
+Every artifact stays tagged `WETLAND-LAB`, is announced on stderr, and is removed
+by `wld lab uninstall`. This is the loud, detectable lab form of a
+persistent/hidden C2 listener — see [`docs/PURPLE-LAB.md`](docs/PURPLE-LAB.md).
 
 Each technique also has a **shortcut** — drop the `lab` word and call it
 directly:
