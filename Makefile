@@ -39,7 +39,7 @@ endif
 
 MONO       = src/monocypher/monocypher.c
 COMMON_SRC = src/wld_crypto.c src/wld_net.c $(MONO)
-CLIENT_SRC = src/client.c src/wld_tunnel.c src/wld_lab.c src/wld_bore.c src/wld_frp.c src/wld_relay.c $(COMMON_SRC)
+CLIENT_SRC = src/client.c src/wld_tunnel.c src/wld_lab.c src/wld_bore.c src/wld_frp.c src/wld_pinggy.c src/wld_relay.c $(COMMON_SRC)
 RELAY_SRC  = src/relay.c src/wld_relay.c $(COMMON_SRC)
 
 BIN = bin/wld bin/wetland-relay
@@ -66,6 +66,7 @@ test: all bin/test_crypto
 	./tests/test_lab.sh
 	./tests/test_bore.sh
 	./tests/test_frp.sh
+	./tests/test_pinggy.sh
 
 # --- Windows cross-compile (mingw-w64) ---
 MINGW ?= x86_64-w64-mingw32-gcc

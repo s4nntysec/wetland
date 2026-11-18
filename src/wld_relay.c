@@ -58,6 +58,9 @@ typedef struct {
 static conn_t *g_conns;      /* indexed by fd */
 static int     g_cap;        /* allocated slots */
 static int     g_verbose;
+static volatile sig_atomic_t g_live_conns;  /* currently-open connections */
+
+int wld_relay_live_conns(void) { return (int)g_live_conns; }
 
 static void
 logv(const char *fmt, ...)
@@ -108,8 +111,10 @@ conn_queue(conn_t *c, const void *data, size_t n)
 static void
 conn_close(conn_t *c)
 {
-	if (c->fd >= 0)
+	if (c->fd >= 0) {
 		wld_closesocket(c->fd);
+		if (g_live_conns > 0) g_live_conns--;
+	}
 	free(c->out);
 	int fd = c->fd;
 	memset(c, 0, sizeof *c);
@@ -242,6 +247,7 @@ accept_new(int lfd)
 		c->fd = fd;
 		c->state = ST_HELLO;
 		c->peer_fd = -1;
+		g_live_conns++;
 		wld_set_nonblock(fd, 1);
 		wld_set_keepalive(fd);
 	}

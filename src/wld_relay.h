@@ -24,4 +24,8 @@ int wld_relay_serve(const char *host, const char *port, int verbose,
                     int announce, volatile sig_atomic_t *stop,
                     int *assigned_port);
 
+/* Number of live connections the (single, in-process) relay currently holds.
+ * Used by embedded tunnels to wait for in-flight data to drain before exit. */
+int wld_relay_live_conns(void);
+
 #endif /* WLD_RELAY_H */

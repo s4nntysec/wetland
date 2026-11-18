@@ -17,6 +17,7 @@
 #include "wld_lab.h"
 #include "wld_bore.h"
 #include "wld_frp.h"
+#include "wld_pinggy.h"
 
 #include "wld_compat.h"
 
@@ -351,9 +352,9 @@ usage(const char *p)
 "zero-config listener: with -l and no relay set (no -H/-x/$WLD_RELAY_HOST)\n"
 "and nothing on the default relay port, wld starts an embedded relay and a\n"
 "public reverse tunnel, then prints the -H/-p line for the other side.\n"
-"  default: bore tunnel via bore.pub (no account; $WLD_BORE_HOST to override)\n"
-"  or self-hosted frp: set $WLD_FRP_SERVER (+ $WLD_FRP_PORT/TOKEN/REMOTE_PORT,\n"
-"  frps with tcpMux=false)\n"
+"  default: pinggy tunnel (free, no account; needs an ssh client)\n"
+"  bore:    set $WLD_BORE_HOST (e.g. bore.pub; no account, native, no ssh)\n"
+"  frp:     set $WLD_FRP_SERVER (self-hosted frps, tcpMux=false)\n"
 "\n"
 "examples:\n"
 "  wld -g -l -i                 # serve a shell, prints the secret to share\n"
@@ -456,13 +457,16 @@ main(int argc, char **argv)
 	 * Zero-config listener: if no relay was specified and nothing is already
 	 * running on the default relay address, spin up an in-process relay and
 	 * expose it through a public reverse tunnel so a listener behind NAT is
-	 * reachable with no setup.
+	 * reachable with no manual setup — just `wld -l`.
 	 *
-	 * Default backend is bore (github.com/ekzhang/bore): its public server
-	 * bore.pub needs no account, sessions don't expire, and the client is
-	 * built in (no binary to install on the host) — matching "no account,
-	 * not short-lived, no host dependency". Point it elsewhere with
-	 * WLD_BORE_HOST. If WLD_FRP_SERVER is set instead, use a self-hosted frp.
+	 * Backend selection:
+	 *   WLD_FRP_SERVER set  -> self-hosted frp
+	 *   WLD_BORE_HOST  set  -> bore (that server; bore.pub if "bore.pub")
+	 *   otherwise           -> pinggy (default): spawns the system ssh to
+	 *                          pinggy.io's free TCP tunnel (no account). This
+	 *                          works from datacenter IPs where bore.pub does
+	 *                          not; its one dependency is an ssh client.
+	 * The assigned public host:port is printed for the connector.
 	 */
 	if (listen_mode && !use_pool && !relay_specified) {
 		int probe = wld_tcp_connect(host, port);
@@ -471,6 +475,7 @@ main(int argc, char **argv)
 			VLOG("wld: using relay already running at %s:%s\n", host, port);
 		} else {
 			const char *frp_server = getenv("WLD_FRP_SERVER");
+			const char *bore_host  = getenv("WLD_BORE_HOST");
 			static char lport[16], pubhost[256];
 			int pubport = 0, r;
 
@@ -492,18 +497,19 @@ main(int argc, char **argv)
 				    "frp tunnel via %s...\n", frp_server);
 				r = wld_frp_autotunnel(frp_server, frp_port, frp_token, req,
 				    g_verbose, lport, sizeof lport, pubhost, sizeof pubhost, &pubport);
-			} else {
-				/* default: bore public tunnel (no account, no host binary) */
-				const char *bore_host  = getenv("WLD_BORE_HOST"); /* NULL = bore.pub */
+			} else if (bore_host != NULL && bore_host[0] != '\0') {
+				/* bore backend (explicit server; ask it to choose the port) */
 				const char *bore_rport = getenv("WLD_BORE_REMOTE_PORT");
-				/* Ask bore to CHOOSE the public port (0): a public server like
-				 * bore.pub rejects a specific port that is taken / out of range.
-				 * The assigned port is printed for the connector. Override only
-				 * for a private bore server that honours fixed ports. */
 				int req = (bore_rport && bore_rport[0]) ? atoi(bore_rport) : 0;
 				fprintf(stderr, "wld: no relay configured — embedded relay + "
-				    "%s tunnel...\n", bore_host ? bore_host : "bore.pub");
+				    "%s tunnel...\n", bore_host);
 				r = wld_bore_autotunnel(bore_host, req, g_verbose,
+				    lport, sizeof lport, pubhost, sizeof pubhost, &pubport);
+			} else {
+				/* default: pinggy (free, no account; needs an ssh client) */
+				fprintf(stderr, "wld: no relay configured — embedded relay + "
+				    "pinggy tunnel...\n");
+				r = wld_pinggy_autotunnel(g_verbose,
 				    lport, sizeof lport, pubhost, sizeof pubhost, &pubport);
 			}
 
@@ -519,9 +525,9 @@ main(int argc, char **argv)
 				host = "127.0.0.1";
 				port = lport;
 				fprintf(stderr, "wld: tunnel failed — relay is LOCAL-ONLY on "
-				    "127.0.0.1:%s (same host/LAN). Re-run with -v to see why; "
-				    "then set WLD_BORE_HOST / WLD_FRP_SERVER, or pass -H.\n",
-				    lport);
+				    "127.0.0.1:%s (same host/LAN). Re-run with -v to see why "
+				    "(pinggy needs an ssh client); or set WLD_BORE_HOST / "
+				    "WLD_FRP_SERVER, or pass -H.\n", lport);
 			} else {
 				die("auto relay/tunnel failed; run wetland-relay and pass -H/-p");
 			}
@@ -604,6 +610,7 @@ main(int argc, char **argv)
 	 * the process (and its relay/proxy threads) exits. No-ops otherwise. */
 	wld_bore_drain(10000);
 	wld_frp_drain(10000);
+	wld_pinggy_drain(10000);
 #endif
 	free(gen);
 	return rc == 0 ? 0 : 1;

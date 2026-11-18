@@ -281,34 +281,43 @@ then prints the exact command for the other side:
 ```sh
 $ wld -g -l -i
 wld: generated secret: 7Kp9mXr...
-wld: no relay configured — embedded relay + bore.pub tunnel...
-wld: tunnel up at bore.pub:43187 — the other side runs:
-       wld -s <secret> -H bore.pub -p 43187 -i
+wld: no relay configured — embedded relay + pinggy tunnel...
+wld: tunnel up at abcd-1-2-3-4.a.free.pinggy.link:43187 — the other side runs:
+       wld -s <secret> -H abcd-1-2-3-4.a.free.pinggy.link -p 43187 -i
 ```
 
 The connector just runs that line. The relay stays **blind** (sees only the
 16-byte address + ciphertext); the tunnel only moves bytes, so the end-to-end
 encryption is unchanged.
 
-### Default backend: bore (no account, nothing to install)
+### Default backend: pinggy (free, no account)
 
-By default the tunnel uses **[bore](https://github.com/ekzhang/bore)** via its
-public server **`bore.pub`**. This fits "no account, not short-lived, no host
-dependency": bore.pub needs no sign-up, bore sessions don't expire, and the bore
-client is **built into `wld`** (no `bore`/`frpc`/`ssh` binary on the host). Point
-it at a different bore server with `WLD_BORE_HOST` / `WLD_BORE_PORT`.
+By default `wld` opens a free **[pinggy](https://pinggy.io)** TCP tunnel by
+spawning the system **`ssh`** (`ssh -p443 -R0:localhost:<relay> tcp@a.pinggy.io`).
+No account, and it works from datacenter IPs. Its one requirement is an **`ssh`
+client** (present on virtually every Linux/macOS host). Free pinggy tunnels get a
+random address and expire after ~60 min — just re-run `wld -l` to refresh.
 
-> ⚠️ **bore.pub blocks many cloud/datacenter IP ranges.** From a normal
-> (residential) machine it works; from a cloud VM / Cloud Shell the connection
-> to `bore.pub:7835` often times out and `wld` falls back to a **local-only**
-> relay. If that happens, point `WLD_BORE_HOST` at a reachable bore server, use
-> the frp backend below, or pass `-H`/`-x`.
+### Alternative backend: bore (no `ssh` dependency)
 
-### Optional backend: self-hosted frp
+Set **`WLD_BORE_HOST`** (e.g. `bore.pub`) to use
+**[bore](https://github.com/ekzhang/bore)** instead — the bore client is built
+into `wld`, so it needs **no host binary at all**:
+
+```sh
+export WLD_BORE_HOST=bore.pub
+wld -g -l -i      # -> prints: ... -H bore.pub -p <port> ...
+```
+
+> ⚠️ **bore.pub is flaky from cloud/datacenter IP ranges** (the connection to
+> `bore.pub:7835` often times out there); it is reliable from a residential
+> machine. That is why pinggy is the default.
+
+### Alternative backend: self-hosted frp
 
 Set **`WLD_FRP_SERVER`** to use [frp](https://github.com/fatedier/frp) against
-your own **frps** instead. The frp client is also native (no `frpc` binary), but
-to stay dependency-light it does **not** do yamux or TLS, so the frps must set
+your own **frps**. The frp client is native (no `frpc` binary), but to stay
+dependency-light it does **not** do yamux or TLS, so the frps must set
 `transport.tcpMux = false` (and accept plaintext control, the default):
 
 ```toml
@@ -323,20 +332,23 @@ export WLD_FRP_SERVER=frp.example.com WLD_FRP_TOKEN=yoursecret
 wld -g -l -i      # -> prints: ... -H frp.example.com -p <port> ...
 ```
 
+Backend selection: `WLD_FRP_SERVER` → frp; else `WLD_BORE_HOST` → bore; else
+pinggy (default).
+
 | Variable | Meaning |
 |----------|---------|
-| `WLD_BORE_HOST` / `WLD_BORE_PORT` | bore server (default `bore.pub` / `7835`) |
+| `WLD_BORE_HOST` / `WLD_BORE_PORT` | use bore; server (e.g. `bore.pub` / `7835`) |
 | `WLD_BORE_REMOTE_PORT` | fixed public port on a private bore server (default: bore chooses) |
-| `WLD_FRP_SERVER` | switch to frp; your frps host |
+| `WLD_FRP_SERVER` | use frp; your frps host |
 | `WLD_FRP_PORT` | frps `bindPort` (default `7000`) |
 | `WLD_FRP_TOKEN` | frps `auth.token` (omit if none) |
 | `WLD_FRP_REMOTE_PORT` | fixed public port (default: derived from the secret) |
 
 Notes:
-- **bore** lets the server **choose** the public port (public servers reject a
-  specific one that is taken / out of range) — `wld` prints the assigned port for
-  the connector. **frp** derives the port from the secret by default (your frps,
-  so you control the allowed range); pin either with `WLD_*_REMOTE_PORT`.
+- **pinggy** and **bore** let the server **choose** the public port — `wld`
+  prints the assigned `host:port` for the connector. **frp** derives the port
+  from the secret by default (your frps, so you control the allowed range); pin
+  bore/frp with `WLD_*_REMOTE_PORT`.
 - The embedded relay and tunnel run in background threads of the listener
   process; on a one-shot pipe send (`wld -l < file`) `wld` waits for the transfer
   to drain before exiting.
@@ -486,19 +498,22 @@ See [Public relay pool](#public-relay-pool--x).
 
 ### `wld: tunnel failed — relay is LOCAL-ONLY ...`
 
-The zero-config tunnel could not reach its public server, so the relay is only
-usable on the same host/LAN. Check, in order:
+The zero-config tunnel could not be set up, so the relay is only usable on the
+same host/LAN. Check, in order:
 
-- **Default (bore):** `bore.pub:7835` is unreachable. The most common cause is a
-  **cloud/datacenter IP range** — bore.pub drops many of them; it usually works
-  from a residential machine. Test: `timeout 8 bash -c 'exec 3<>/dev/tcp/bore.pub/7835 && echo ok'`.
-  Point `WLD_BORE_HOST` at another bore server, use frp, or pass `-H`.
+- **Default (pinggy):** needs an **`ssh` client** on the host (`command -v ssh`).
+  With `-v` you'll see `[wld-pinggy] opening pinggy tunnel via ssh ...`; if ssh is
+  missing or can't reach `a.pinggy.io:443`, it fails. (Free pinggy tunnels also
+  expire after ~60 min — just re-run.)
+- **bore (`WLD_BORE_HOST` set):** that server's control port (`bore.pub` → 7835)
+  must be reachable. bore.pub is flaky from **cloud/datacenter IP ranges** (works
+  from residential). Test: `timeout 8 bash -c 'exec 3<>/dev/tcp/bore.pub/7835 && echo ok'`.
 - **frp (`WLD_FRP_SERVER` set):** the frps must be reachable on `WLD_FRP_PORT`
   (default `7000`), have **`transport.tcpMux = false`** (this client has no
   yamux), and `WLD_FRP_TOKEN` must match its `auth.token`. Pin a known-allowed
   public port with `WLD_FRP_REMOTE_PORT`.
-- Run with `-v` to see the handshake (`[wld-bore]` / `[wld-frp] ...`) and the
-  exact failure.
+- Run with `-v` to see the handshake (`[wld-pinggy]` / `[wld-bore]` /
+  `[wld-frp] ...`) and the exact failure.
 
 See [Zero-config tunnel](#zero-config-tunnel).
 
@@ -556,12 +571,13 @@ src/wld_net.{c,h}      socket helpers
 src/wld_proto.h        relay wire protocol and framing constants
 src/wld_relay.{c,h}    embeddable relay core (serve loop)
 src/relay.c            wetland-relay: thin CLI wrapper around the core
-src/wld_bore.{c,h}     native bore reverse-tunnel client (zero-config default)
+src/wld_pinggy.{c,h}   pinggy tunnel backend via ssh (zero-config default)
+src/wld_bore.{c,h}     native bore reverse-tunnel client (alt backend)
 src/wld_frp.{c,h}      native frp reverse-tunnel client (self-hosted option)
 src/client.c           wld: the client (pipe, exec and PTY modes)
 src/wld_lab.{c,h}      purple-team lab: documented, reversible TTP sims
 src/monocypher/        bundled cryptographic code
-tests/                 crypto unit, end-to-end, lab, bore and frp tunnel tests
+tests/                 crypto unit, end-to-end, lab, pinggy/bore/frp tunnel tests
 docs/PROTOCOL.md       wire format and key schedule
 docs/PURPLE-LAB.md     purple-team lab: ATT&CK -> detection mapping
 ```
@@ -573,8 +589,8 @@ make test
 ```
 
 This runs the crypto unit tests, an end-to-end test that starts a relay and two
-clients on localhost, a smoke test of the `wld lab` techniques, and bore + frp
-auto-tunnel tests against local stand-in tunnel servers.
+clients on localhost, a smoke test of the `wld lab` techniques, and pinggy / bore
+/ frp auto-tunnel tests against local stand-in tunnel servers.
 
 The CI workflow (`.github/workflows/build.yml`) builds and tests on Linux,
 macOS and Windows, and uploads the binaries as artifacts.
@@ -584,8 +600,8 @@ macOS and Windows, and uploads the binaries as artifacts.
 ## Roadmap
 
 Done since the first version: a secret-derived **public relay pool** (`-x`), a
-**zero-config tunnel** for NAT'd listeners (native bore client via bore.pub by
-default, or self-hosted frp), and a **purple-team lab** module (`wld lab`).
+**zero-config tunnel** for NAT'd listeners (pinggy by default, or bore / self-
+hosted frp), and a **purple-team lab** module (`wld lab`).
 
 Not yet implemented:
 
