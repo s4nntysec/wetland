@@ -14,6 +14,7 @@
 #include "wld_compat.h"
 #include "wld_net.h"
 #include "wld_autotunnel.h"
+#include "wld_session.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -662,7 +663,10 @@ lab_usage(void)
 "\n"
 "  --tunnel         (any technique) also open the zero-config public tunnel\n"
 "                   (same as `wld -l`: embedded relay + pinggy/bore/frp), and\n"
-"                   print the public host:port.\n",
+"                   print the public host:port.\n"
+"  -l / -i / -e CMD (masquerade, beacon) also run a real listener via the\n"
+"                   client flow: e.g. `wld lab masquerade -s SEC -l -i` is a\n"
+"                   masqueraded shell listener. persist/hide refuse -l.\n",
 	    stderr);
 	return 1;
 }
@@ -694,6 +698,71 @@ wld_lab_main(int argc, char **argv)
 		sub_argv[sub_argc++] = raw[i];
 	}
 	sub_argv[sub_argc] = NULL;
+
+	/*
+	 * Serve a real listener alongside the technique when serve flags (-l/-i/-e)
+	 * are present. Short-dash flags go to the client flow (wld_client_run);
+	 * long `--` flags are the technique's. Supported for masquerade (-> a
+	 * masqueraded listener) and beacon (listener + background beacon). persist
+	 * and hide are NOT fused with a listener (that would be a persistent/hidden
+	 * backdoor) — run them separately.
+	 */
+	int serve = 0;
+	for (int i = 0; i < sub_argc; i++)
+		if (!strcmp(sub_argv[i], "-l") || !strcmp(sub_argv[i], "-i") ||
+		    !strcmp(sub_argv[i], "-e")) { serve = 1; break; }
+
+	if (serve) {
+		char **serve_argv = calloc((size_t)sub_argc + 4, sizeof(char *));
+		char **tech_argv  = calloc((size_t)sub_argc + 1, sizeof(char *));
+		if (!serve_argv || !tech_argv) { free(serve_argv); free(tech_argv); free(sub_argv); return 1; }
+		int sn = 1, tn = 0;         /* serve_argv[0] = program name */
+		serve_argv[0] = argv[0];
+		const char *masq = NULL;
+		for (int i = 0; i < sub_argc; i++) {
+			char *t = sub_argv[i];
+			if (t[0] == '-' && t[1] == '-') {                 /* technique flag (+value) */
+				tech_argv[tn++] = t;
+				if (i + 1 < sub_argc && sub_argv[i + 1][0] != '-') tech_argv[tn++] = sub_argv[++i];
+			} else if (t[0] == '-' && t[1] && t[2] == '\0') { /* client short flag */
+				serve_argv[sn++] = t;
+				if (strchr("skeRHpM", t[1]) && i + 1 < sub_argc) serve_argv[sn++] = sub_argv[++i];
+			}
+		}
+		tech_argv[tn] = NULL;
+
+		if (strcmp(tech, "masquerade") == 0) {
+			for (int i = 0; i + 1 < tn; i++)
+				if (!strcmp(tech_argv[i], "--name")) masq = tech_argv[i + 1];
+			if (masq == NULL) masq = "[kworker/0:0]";
+			/* copy the serve argv off the real argv, then rename the REAL
+			 * (contiguous) process argv, then serve with the copies. */
+			char *name = strdup(masq);
+			char **cp = calloc((size_t)sn + 2, sizeof(char *));
+			cp[0] = strdup(argv[0]);
+			for (int i = 1; i < sn; i++) cp[i] = strdup(serve_argv[i]);
+			cp[sn] = NULL;
+			labf("masquerade + listener: serving as '%s' (ps shows that, not ./wld)", name);
+			wld_proc_masquerade(argv, argc, name);
+			int rc = wld_client_run(sn, cp);
+			free(serve_argv); free(tech_argv); free(sub_argv);
+			return rc;
+		}
+		if (strcmp(tech, "beacon") == 0) {
+			pid_t bp = fork();
+			if (bp == 0) { _exit(do_beacon(tn, tech_argv)); }   /* background beacon */
+			labf("beacon + listener: beacon pid=%ld, serving...", (long)bp);
+			int rc = wld_client_run(sn, serve_argv);
+			if (bp > 0) kill(bp, SIGTERM);
+			free(serve_argv); free(tech_argv); free(sub_argv);
+			return rc;
+		}
+		labf("'%s' cannot be fused with a listener (-l) — that would be a "
+		     "persistent/hidden remote-access backdoor. Run `wld lab %s` and "
+		     "`wld -l` separately.", tech, tech);
+		free(serve_argv); free(tech_argv); free(sub_argv);
+		return 2;
+	}
 
 	if (want_tunnel) {
 		static char lport[16], pubhost[256];

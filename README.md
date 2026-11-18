@@ -425,6 +425,13 @@ Any `wld lab` technique also takes **`--tunnel`**, which opens the same
 zero-config public tunnel as `wld -l` (embedded relay + pinggy/bore/frp) and
 prints the public `host:port` before running the technique.
 
+`masquerade` and `beacon` also accept the listener flags **`-l` / `-i` / `-e CMD`**
+(plus `-s`/`-g`/`-H`/...), running a real listener via the client flow — e.g.
+`wld lab masquerade -g -l -i` is a masqueraded interactive shell listener, and
+`wld lab beacon --to c2:443 -g -l -i` serves while beaconing. `persist` and
+`hide` refuse `-l` (fusing persistence/hiding with a listener would be a covert
+backdoor — run them separately).
+
 Each technique also has a **shortcut** — drop the `lab` word and call it
 directly:
 
@@ -580,6 +587,7 @@ src/wld_net.{c,h}      socket helpers
 src/wld_proto.h        relay wire protocol and framing constants
 src/wld_relay.{c,h}    embeddable relay core (serve loop)
 src/relay.c            wetland-relay: thin CLI wrapper around the core
+src/wld_session.h      one-session runner shared by the client and wld lab
 src/wld_autotunnel.{c,h}  zero-config tunnel selector (shared by -l and wld lab)
 src/wld_pinggy.{c,h}   pinggy tunnel backend via ssh (zero-config default)
 src/wld_bore.{c,h}     native bore reverse-tunnel client (alt backend)

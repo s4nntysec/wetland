@@ -16,6 +16,7 @@
 #include "wld_tunnel.h"
 #include "wld_lab.h"
 #include "wld_autotunnel.h"
+#include "wld_session.h"
 
 #include "wld_compat.h"
 
@@ -366,14 +367,187 @@ usage(const char *p)
 	exit(1);
 }
 
+/*
+ * Run one session: relay selection / zero-config tunnel, rendezvous, handshake,
+ * greeting and serve. Shared by main() and the lab module. Crypto/net must be
+ * initialised and any -M masquerade already applied by the caller.
+ */
 int
-main(int argc, char **argv)
+wld_run_session(const struct wld_session_opts *o)
 {
-	/* Purple-team lab: `wld lab <technique> ...` or the `wld <technique> ...`
-	 * shortcut (e.g. `wld persist`). Isolated from the tunnel path. */
-	if (argc >= 2 && wld_lab_is_command(argv[1]))
-		return wld_lab_main(argc, argv);
+	const char *secret = o->secret;
+	const char *host = o->host;
+	const char *port = o->port;
+	int listen_mode = o->listen_mode, interactive = o->interactive;
+	const char *cmd = o->cmd;
+	int wait_flag = o->wait_flag, use_pool = o->use_pool;
+	int relay_specified = o->relay_specified;
+	long epoch_secs = o->epoch_secs;
+	long tunnel_expiry_secs = 0;
 
+	if (host == NULL) host = "127.0.0.1";
+	if (port == NULL) port = WLD_RELAY_DEFAULT_PORT;
+
+	/*
+	 * Public relay pool: pick one relay deterministically from the secret so
+	 * both peers meet on the same host without extra coordination.
+	 */
+	struct relay_entry *pool = NULL;
+	if (use_pool) {
+		int npool = build_pool(&pool, port);
+		if (npool < 0)
+			die("out of memory building relay pool");
+		if (npool == 0)
+			die("relay pool is empty: set WLD_RELAY_POOL=\"host:port,...\" "
+			    "(or build your own relay list into the binary)");
+		uint8_t sel[WLD_ADDR_LEN];
+		if (wld_derive(secret, 0, sel, NULL, NULL) != 0)
+			die("key derivation failed");
+		uint64_t v = 0;
+		for (int i = 0; i < 8; i++) v = (v << 8) | sel[i];
+		int idx = (int)(v % (uint64_t)npool);
+		host = pool[idx].host;
+		port = pool[idx].port;
+		VLOG("wld: public relay %d/%d -> %s:%s\n", idx + 1, npool, host, port);
+	}
+
+#ifndef _WIN32
+	/* Zero-config listener: no relay + nothing on the default port -> embedded
+	 * relay + public tunnel (pinggy default; WLD_BORE_HOST / WLD_FRP_SERVER). */
+	if (listen_mode && !use_pool && !relay_specified) {
+		int probe = wld_tcp_connect(host, port);
+		if (probe >= 0) {
+			wld_closesocket(probe);
+			VLOG("wld: using relay already running at %s:%s\n", host, port);
+		} else {
+			static char lport[16], pubhost[256];
+			int pubport = 0;
+			int r = wld_open_tunnel(secret, g_verbose, lport, sizeof lport,
+			    pubhost, sizeof pubhost, &pubport, &tunnel_expiry_secs);
+			if (r == 0) {
+				host = "127.0.0.1";
+				port = lport;
+				fprintf(stderr,
+				    "wld: tunnel up at %s:%d — the other side runs:\n"
+				    "       wld -s <secret> -H %s -p %d%s\n",
+				    pubhost, pubport, pubhost, pubport,
+				    interactive ? " -i" : "");
+			} else if (lport[0] != '\0') {
+				host = "127.0.0.1";
+				port = lport;
+				fprintf(stderr, "wld: tunnel failed — relay is LOCAL-ONLY on "
+				    "127.0.0.1:%s (same host/LAN). Re-run with -v to see why "
+				    "(pinggy needs an ssh client); or set WLD_BORE_HOST / "
+				    "WLD_FRP_SERVER, or pass -H.\n", lport);
+			} else {
+				die("auto relay/tunnel failed; run wetland-relay and pass -H/-p");
+			}
+		}
+	}
+#endif
+
+	uint64_t epoch0 = 0;
+	if (epoch_secs > 0)
+		epoch0 = (uint64_t)(time(NULL) / epoch_secs);
+
+	uint8_t psk[WLD_PSK_LEN], addr[WLD_ADDR_LEN], token[WLD_TOKEN_LEN];
+	if (wld_derive(secret, epoch0, addr, psk, token) != 0)
+		die("key derivation failed");
+
+	uint8_t role = listen_mode ? WLD_ROLE_LISTEN : WLD_ROLE_CONNECT;
+
+	int tun = -1;
+	if (!listen_mode && epoch_secs > 0) {
+		int offs[3] = { 0, -1, +1 };
+		for (int i = 0; i < 3 && tun < 0; i++) {
+			uint8_t a[WLD_ADDR_LEN];
+			wld_derive(secret, epoch0 + offs[i], a, NULL, NULL);
+			int r = rendezvous(host, port, role, wait_flag, a, token);
+			if (r >= 0) { tun = r; break; }
+			if (r == -1) break;
+			VLOG("wld: no listener at epoch offset %d\n", offs[i]);
+		}
+		if (tun < 0)
+			die("no peer is listening (try -w to wait)");
+	} else {
+		tun = rendezvous(host, port, role, wait_flag || listen_mode, addr, token);
+		if (tun == -2)
+			die("no peer is listening (try -w to wait)");
+		if (tun < 0)
+			exit(1);
+	}
+
+	/* End-to-end handshake. Connector = initiator, listener = responder. */
+	wld_session sess;
+	int hs = wld_handshake(tun, !listen_mode, psk, &sess);
+	if (hs == -2)
+		die("handshake failed: wrong secret or active MITM (connection refused)");
+	if (hs != 0)
+		die("handshake failed");
+	VLOG("wld: secure channel established\n");
+	wld_wipe(psk, sizeof psk);
+
+	/* One-way post-handshake greeting (listener -> connector): only the
+	 * connector prints it (tunnel-expiry heads-up). Always exchanged. */
+	if (listen_mode) {
+		char greet[256];
+		greet[0] = '\0';
+		if (tunnel_expiry_secs > 0)
+			snprintf(greet, sizeof greet,
+			    "wld: note — this link uses a free pinggy tunnel that expires in "
+			    "~%ld min; if it drops, reconnect with the address the operator "
+			    "shares.", tunnel_expiry_secs / 60);
+		if (wld_tunnel_send_greeting(tun, &sess, greet) != 0)
+			die("greeting failed");
+	} else {
+		char greet[512];
+		if (wld_tunnel_recv_greeting(tun, &sess, greet, sizeof greet) != 0)
+			die("greeting failed");
+		if (greet[0] != '\0')
+			fprintf(stderr, "%s\n", greet);
+	}
+
+	int rc;
+#ifdef _WIN32
+	if (listen_mode && (interactive || cmd != NULL)) {
+		fprintf(stderr, "wld: -i/-e on the listener need a PTY; "
+		    "not supported on Windows yet (use WSL)\n");
+		rc = 1;
+	} else {
+		rc = mode_pipe(tun, &sess);
+	}
+#else
+	if (interactive) {
+		if (listen_mode) {
+			const char *shell = getenv("SHELL");
+			rc = mode_pty_server(tun, &sess, shell ? shell : "/bin/sh");
+		} else {
+			rc = mode_pty_client(tun, &sess);
+		}
+	} else if (cmd != NULL) {
+		rc = mode_exec(tun, &sess, cmd);
+	} else {
+		rc = mode_pipe(tun, &sess);
+	}
+#endif
+
+	wld_closesocket(tun);
+#ifndef _WIN32
+	/* Let any in-flight auto-tunnel data finish before we exit. No-op if none. */
+	wld_tunnel_drain_all(10000);
+#endif
+	return rc == 0 ? 0 : 1;
+}
+
+/*
+ * Full client flow (parse flags, init, resolve/generate secret, optional -M
+ * masquerade, then wld_run_session). Exposed so the lab module can serve a
+ * listener via `wld lab <tech> -l/-i/-e` by handing it the serve-related args.
+ */
+int
+wld_client_run(int argc, char **argv)
+{
+	optind = 1;   /* reset getopt: may be called after the lab parsed args */
 	const char *secret = NULL, *secret_file = NULL, *cmd = NULL;
 	const char *masq_name = NULL;
 	int listen_mode = 0, interactive = 0, do_gen = 0, wait_flag = 0;
@@ -382,7 +556,6 @@ main(int argc, char **argv)
 	const char *host = getenv("WLD_RELAY_HOST");
 	const char *port = getenv("WLD_RELAY_PORT");
 	int relay_specified = (host != NULL);
-	long tunnel_expiry_secs = 0;   /* >0 => warn the connector (pinggy) */
 	int opt;
 
 	while ((opt = getopt(argc, argv, "s:k:gliwe:R:H:p:xM:vh")) != -1) {
@@ -448,179 +621,23 @@ main(int argc, char **argv)
 	}
 #endif
 
-	/*
-	 * Public relay pool: pick one relay deterministically from the secret so
-	 * both peers meet on the same host without extra coordination. Selection
-	 * is derived at epoch 0 so it stays fixed even when -R rotates addresses.
-	 */
-	struct relay_entry *pool = NULL;
-	if (use_pool) {
-		int npool = build_pool(&pool, port);
-		if (npool < 0)
-			die("out of memory building relay pool");
-		if (npool == 0)
-			die("relay pool is empty: set WLD_RELAY_POOL=\"host:port,...\" "
-			    "(or build your own relay list into the binary)");
-		uint8_t sel[WLD_ADDR_LEN];
-		if (wld_derive(secret, 0, sel, NULL, NULL) != 0)
-			die("key derivation failed");
-		uint64_t v = 0;
-		for (int i = 0; i < 8; i++) v = (v << 8) | sel[i];
-		int idx = (int)(v % (uint64_t)npool);
-		host = pool[idx].host;
-		port = pool[idx].port;
-		VLOG("wld: public relay %d/%d -> %s:%s\n",
-		    idx + 1, npool, host, port);
-	}
-
-#ifndef _WIN32
-	/*
-	 * Zero-config listener: if no relay was specified and nothing is already
-	 * running on the default relay address, spin up an in-process relay and
-	 * expose it through a public reverse tunnel so a listener behind NAT is
-	 * reachable with no manual setup — just `wld -l`.
-	 *
-	 * Backend selection:
-	 *   WLD_FRP_SERVER set  -> self-hosted frp
-	 *   WLD_BORE_HOST  set  -> bore (that server; bore.pub if "bore.pub")
-	 *   otherwise           -> pinggy (default): spawns the system ssh to
-	 *                          pinggy.io's free TCP tunnel (no account). This
-	 *                          works from datacenter IPs where bore.pub does
-	 *                          not; its one dependency is an ssh client.
-	 * The assigned public host:port is printed for the connector.
-	 */
-	if (listen_mode && !use_pool && !relay_specified) {
-		int probe = wld_tcp_connect(host, port);
-		if (probe >= 0) {
-			wld_closesocket(probe);
-			VLOG("wld: using relay already running at %s:%s\n", host, port);
-		} else {
-			static char lport[16], pubhost[256];
-			int pubport = 0;
-			int r = wld_open_tunnel(secret, g_verbose, lport, sizeof lport,
-			    pubhost, sizeof pubhost, &pubport, &tunnel_expiry_secs);
-
-			if (r == 0) {
-				host = "127.0.0.1";
-				port = lport;
-				fprintf(stderr,
-				    "wld: tunnel up at %s:%d — the other side runs:\n"
-				    "       wld -s <secret> -H %s -p %d%s\n",
-				    pubhost, pubport, pubhost, pubport,
-				    interactive ? " -i" : "");
-			} else if (lport[0] != '\0') {
-				host = "127.0.0.1";
-				port = lport;
-				fprintf(stderr, "wld: tunnel failed — relay is LOCAL-ONLY on "
-				    "127.0.0.1:%s (same host/LAN). Re-run with -v to see why "
-				    "(pinggy needs an ssh client); or set WLD_BORE_HOST / "
-				    "WLD_FRP_SERVER, or pass -H.\n", lport);
-			} else {
-				die("auto relay/tunnel failed; run wetland-relay and pass -H/-p");
-			}
-		}
-	}
-#endif
-
-	/* epoch for rotating addresses (0 = static) */
-	uint64_t epoch0 = 0;
-	if (epoch_secs > 0)
-		epoch0 = (uint64_t)(time(NULL) / epoch_secs);
-
-	uint8_t psk[WLD_PSK_LEN], addr[WLD_ADDR_LEN], token[WLD_TOKEN_LEN];
-	if (wld_derive(secret, epoch0, addr, psk, token) != 0)
-		die("key derivation failed");
-
-	uint8_t role = listen_mode ? WLD_ROLE_LISTEN : WLD_ROLE_CONNECT;
-
-	/* Rendezvous (connector may try neighbouring epochs when rotating). */
-	int tun = -1;
-	if (!listen_mode && epoch_secs > 0) {
-		int offs[3] = { 0, -1, +1 };
-		for (int i = 0; i < 3 && tun < 0; i++) {
-			uint8_t a[WLD_ADDR_LEN];
-			wld_derive(secret, epoch0 + offs[i], a, NULL, NULL);
-			int r = rendezvous(host, port, role, wait_flag, a, token);
-			if (r >= 0) { tun = r; break; }
-			if (r == -1) break; /* hard error */
-			VLOG("wld: no listener at epoch offset %d\n", offs[i]);
-		}
-		if (tun < 0)
-			die("no peer is listening (try -w to wait)");
-	} else {
-		tun = rendezvous(host, port, role, wait_flag || listen_mode, addr, token);
-		if (tun == -2)
-			die("no peer is listening (try -w to wait)");
-		if (tun < 0)
-			exit(1);
-	}
-
-	/* End-to-end handshake. Connector = initiator, listener = responder. */
-	wld_session sess;
-	int hs = wld_handshake(tun, !listen_mode, psk, &sess);
-	if (hs == -2)
-		die("handshake failed: wrong secret or active MITM (connection refused)");
-	if (hs != 0)
-		die("handshake failed");
-	VLOG("wld: secure channel established\n");
-
-	wld_wipe(psk, sizeof psk);
-
-	/*
-	 * One-way post-handshake greeting (listener -> connector). The listener
-	 * stays quiet; only the connector prints it. Used to warn about a tunnel
-	 * that will expire. Always exchanged (empty when nothing to say) so both
-	 * sides' record counters advance together.
-	 */
-	if (listen_mode) {
-		char greet[256];
-		greet[0] = '\0';
-		if (tunnel_expiry_secs > 0)
-			snprintf(greet, sizeof greet,
-			    "wld: note — this link uses a free pinggy tunnel that expires in "
-			    "~%ld min; if it drops, reconnect with the address the operator "
-			    "shares.", tunnel_expiry_secs / 60);
-		if (wld_tunnel_send_greeting(tun, &sess, greet) != 0)
-			die("greeting failed");
-	} else {
-		char greet[512];
-		if (wld_tunnel_recv_greeting(tun, &sess, greet, sizeof greet) != 0)
-			die("greeting failed");
-		if (greet[0] != '\0')
-			fprintf(stderr, "%s\n", greet);
-	}
-
-	int rc;
-#ifdef _WIN32
-	if (listen_mode && (interactive || cmd != NULL)) {
-		fprintf(stderr, "wld: -i/-e on the listener need a PTY; "
-		    "not supported on Windows yet (use WSL)\n");
-		rc = 1;
-	} else {
-		/* pipe mode covers file transfer and scripted I/O on Windows */
-		rc = mode_pipe(tun, &sess);
-	}
-#else
-	if (interactive) {
-		if (listen_mode) {
-			const char *shell = getenv("SHELL");
-			rc = mode_pty_server(tun, &sess, shell ? shell : "/bin/sh");
-		} else {
-			rc = mode_pty_client(tun, &sess);
-		}
-	} else if (cmd != NULL) {
-		rc = mode_exec(tun, &sess, cmd);
-	} else {
-		rc = mode_pipe(tun, &sess);
-	}
-#endif
-
-	wld_closesocket(tun);
-#ifndef _WIN32
-	/* If we auto-started a tunnel, let any in-flight proxied data finish before
-	 * the process (and its relay/proxy threads) exits. No-op otherwise. */
-	wld_tunnel_drain_all(10000);
-#endif
+	struct wld_session_opts o = {
+		.secret = secret, .listen_mode = listen_mode, .interactive = interactive,
+		.cmd = cmd, .wait_flag = wait_flag, .epoch_secs = epoch_secs,
+		.host = host, .port = port, .use_pool = use_pool,
+		.relay_specified = relay_specified,
+	};
+	int rc = wld_run_session(&o);
 	free(gen);
-	return rc == 0 ? 0 : 1;
+	return rc;
+}
+
+int
+main(int argc, char **argv)
+{
+	/* Purple-team lab: `wld lab <technique> ...` or the `wld <technique> ...`
+	 * shortcut (e.g. `wld persist`). Isolated from the tunnel path. */
+	if (argc >= 2 && wld_lab_is_command(argv[1]))
+		return wld_lab_main(argc, argv);
+	return wld_client_run(argc, argv);
 }
