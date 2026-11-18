@@ -345,6 +345,9 @@ usage(const char *p)
 "  -p PORT     relay port (default: $WLD_RELAY_PORT or %s)\n"
 "  -x          pick a public relay from the pool ($WLD_RELAY_POOL),\n"
 "              chosen deterministically from the secret (both peers agree)\n"
+"  -M NAME     masquerade this process's name in ps / /proc (T1036); e.g.\n"
+"              -M '[kworker/0:0]'. Opt-in; authorized lab use. Still detectable\n"
+"              via /proc/pid/exe (see docs/PURPLE-LAB.md).\n"
 "  -v          verbose\n"
 "\n"
 "zero-config listener: with -l and no relay set (no -H/-x/$WLD_RELAY_HOST)\n"
@@ -372,6 +375,7 @@ main(int argc, char **argv)
 		return wld_lab_main(argc, argv);
 
 	const char *secret = NULL, *secret_file = NULL, *cmd = NULL;
+	const char *masq_name = NULL;
 	int listen_mode = 0, interactive = 0, do_gen = 0, wait_flag = 0;
 	int use_pool = 0;
 	long epoch_secs = 0;
@@ -381,7 +385,7 @@ main(int argc, char **argv)
 	long tunnel_expiry_secs = 0;   /* >0 => warn the connector (pinggy) */
 	int opt;
 
-	while ((opt = getopt(argc, argv, "s:k:gliwe:R:H:p:xvh")) != -1) {
+	while ((opt = getopt(argc, argv, "s:k:gliwe:R:H:p:xM:vh")) != -1) {
 		switch (opt) {
 		case 's': secret = optarg; break;
 		case 'k': secret_file = optarg; break;
@@ -394,6 +398,7 @@ main(int argc, char **argv)
 		case 'H': host = optarg; relay_specified = 1; break;
 		case 'p': port = optarg; break;
 		case 'x': use_pool = 1; relay_specified = 1; break;
+		case 'M': masq_name = optarg; break;
 		case 'v': g_verbose = 1; break;
 		case 'h':
 		default: usage(argv[0]);
@@ -425,6 +430,23 @@ main(int argc, char **argv)
 	}
 	if (secret == NULL || secret[0] == '\0')
 		die("no secret given (use -s, -k or -g)");
+
+#ifndef _WIN32
+	/*
+	 * Explicit process masquerade (-M): rename this process so `ps` shows the
+	 * given name instead of `./wld ...` (T1036). Opt-in, not the default. argv
+	 * is overwritten, so copy the strings we still need off it first. Still
+	 * detectable via /proc/pid/exe — see docs/PURPLE-LAB.md.
+	 */
+	if (masq_name != NULL) {
+		char *mn = strdup(masq_name);
+		secret = strdup(secret);                 /* may have pointed into argv */
+		if (host) host = strdup(host);
+		if (port) port = strdup(port);
+		if (cmd)  cmd  = strdup(cmd);
+		if (mn) wld_proc_masquerade(argv, argc, mn);
+	}
+#endif
 
 	/*
 	 * Public relay pool: pick one relay deterministically from the secret so

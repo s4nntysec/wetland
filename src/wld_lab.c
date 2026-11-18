@@ -51,6 +51,11 @@ wld_lab_main(int argc, char **argv)
 	return 1;
 }
 
+void wld_proc_masquerade(char **argv, int argc, const char *name)
+{
+	(void)argv; (void)argc; (void)name; /* no-op on Windows */
+}
+
 #else /* ---------------------------------------------------------------- POSIX */
 
 #include <unistd.h>
@@ -203,6 +208,30 @@ hint_beacon(void)
 
 /* ---- technique: masquerade ---------------------------------------------- */
 
+/*
+ * Rewrite this process's visible name (T1036): the kernel comm via prctl, and
+ * the contiguous argv region so `ps`/`/proc/pid/cmdline` show `name` instead of
+ * `./wld ...`. `name` is copied first because argv memory is wiped. Reusable by
+ * the `wld lab masquerade` technique and the client's `-M` flag.
+ */
+void
+wld_proc_masquerade(char **argv, int argc, const char *name)
+{
+	if (name == NULL || argv == NULL || argc < 1) return;
+	char fake[256];
+	snprintf(fake, sizeof fake, "%s", name);
+#ifdef __linux__
+	prctl(PR_SET_NAME, fake, 0, 0, 0);
+#endif
+	char *start = argv[0];
+	char *end   = argv[argc - 1] + strlen(argv[argc - 1]) + 1;
+	size_t span = (size_t)(end - start);
+	if (span > 1) {
+		memset(start, 0, span);
+		strncpy(start, fake, span - 1);
+	}
+}
+
 static int
 do_masquerade(int argc, char **argv, char **origv, int origc)
 {
@@ -215,8 +244,6 @@ do_masquerade(int argc, char **argv, char **origv, int origc)
 		else { labf("masquerade: unknown arg '%s'", argv[i]); return 2; }
 	}
 
-	/* Copy the name out first: argv[] memory is about to be wiped and `name`
-	 * may point into it (it came from argv). */
 	char fake[256];
 	snprintf(fake, sizeof fake, "%s", name);
 
@@ -227,18 +254,7 @@ do_masquerade(int argc, char **argv, char **origv, int origc)
 	labf("masquerade: pid=%ld original comm='%s' argv0='%s'",
 	    (long)getpid(), orig, origv[0]);
 
-	/* 1) kernel-visible comm (truncated to 15 chars by the kernel) */
-#ifdef __linux__
-	prctl(PR_SET_NAME, fake, 0, 0, 0);
-#endif
-	/* 2) rewrite the contiguous argv region so ps / /proc/pid/cmdline lie */
-	char *start = origv[0];
-	char *end   = origv[origc - 1] + strlen(origv[origc - 1]) + 1;
-	size_t span = (size_t)(end - start);
-	if (span > 1) {
-		memset(start, 0, span);
-		strncpy(start, fake, span - 1);
-	}
+	wld_proc_masquerade(origv, origc, fake);
 
 	labf("masquerade: now presenting as '%s' for %lds "
 	    "(check: ps -p %ld -o pid,comm,args)", fake, duration, (long)getpid());

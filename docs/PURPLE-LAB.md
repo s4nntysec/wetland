@@ -46,6 +46,17 @@ Sets the kernel-visible process name (`prctl(PR_SET_NAME)`) and overwrites the
 contiguous `argv[]` region so `ps`, `top` and `/proc/<pid>/cmdline` all show the
 fake name. Holds for `--duration` seconds so it is observable.
 
+The same rename is available as an opt-in flag on the live client, **`-M NAME`**,
+so a running listener is masqueraded instead of showing `./wld ...`:
+
+```sh
+wld -g -l -i -M "[kworker/0:0]"   # masqueraded C2 listener (real serving process)
+```
+
+This is the realistic case to detect — a masqueraded process that is actually a
+remote-access listener. It is opt-in (plain `wld -l` is not masqueraded) and, as
+below, still detectable via `/proc/<pid>/exe`.
+
 **Blue team:**
 - A process whose `comm` looks like a kernel thread (`[kworker/...]`, `[kthreadd]`)
   but has a real `/proc/<pid>/exe`, a writable heap/stack and mapped shared

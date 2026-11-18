@@ -220,6 +220,7 @@ Both sides must use the same `-R` value and roughly synchronised clocks.
 | `-H HOST` | relay host (env: `WLD_RELAY_HOST`, default `127.0.0.1`) |
 | `-p PORT` | relay port (env: `WLD_RELAY_PORT`) |
 | `-x` | pick a relay from the pool `WLD_RELAY_POOL`, chosen from the secret (see [Public relay pool](#public-relay-pool--x)) |
+| `-M NAME` | masquerade the process name in `ps`/`/proc` (T1036), e.g. `-M '[kworker/0:0]'` — opt-in, authorized-lab use; still detectable via `/proc/pid/exe` (see [`docs/PURPLE-LAB.md`](docs/PURPLE-LAB.md)) |
 | `-v` | verbose output |
 | `-h` | show usage |
 

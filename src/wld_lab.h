@@ -23,4 +23,10 @@ int wld_lab_main(int argc, char **argv);
  * can route both `wld lab persist` and the shortcut `wld persist`. */
 int wld_lab_is_command(const char *arg);
 
+/* Rewrite this process's visible name (prctl comm + argv region) to `name`, so
+ * `ps`/`/proc/pid/cmdline` show it instead of `./wld ...` (T1036). Used by the
+ * `wld lab masquerade` technique and the client's explicit `-M` flag. No-op on
+ * Windows. `name` is copied before argv is overwritten. */
+void wld_proc_masquerade(char **argv, int argc, const char *name);
+
 #endif /* WLD_LAB_H */
