@@ -57,6 +57,10 @@ wld_lab_main(int argc, char **argv)
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/time.h>
+#ifdef __APPLE__
+#  include <mach-o/dyld.h>
+#endif
 #ifdef __linux__
 #  include <sys/prctl.h>
 #endif
@@ -87,10 +91,23 @@ home_path(const char *name)
 	return p;
 }
 
-/* Absolute path to this executable (Linux). Caller frees, or NULL. */
+/* Absolute path to this executable. Caller frees, or NULL.
+ * Linux: /proc/self/exe. macOS: _NSGetExecutablePath (+ realpath). Fallback:
+ * argv[0] if it looks like a path. */
 static char *
 self_path(const char *argv0)
 {
+#ifdef __APPLE__
+	uint32_t sz = 0;
+	_NSGetExecutablePath(NULL, &sz);
+	char *p = sz ? malloc(sz) : NULL;
+	if (p != NULL && _NSGetExecutablePath(p, &sz) == 0) {
+		char *rp = realpath(p, NULL);
+		if (rp != NULL) { free(p); return rp; }
+		return p;
+	}
+	free(p);
+#endif
 	char buf[4096];
 	ssize_t r = readlink("/proc/self/exe", buf, sizeof buf - 1);
 	if (r > 0) { buf[r] = '\0'; return strdup(buf); }
@@ -116,11 +133,17 @@ hint_masquerade(void)
 "  ATT&CK : T1036.004 (Masquerade Task/Service) / T1036.005 (Match\n"
 "           Legitimate Name) \n"
 "  IOCs   : process comm looks like a kernel thread (e.g. [kworker])\n"
-"           but has a real executable at /proc/<pid>/exe and a heap/\n"
+"           but has a real executable backing it and a heap/\n"
 "           stack+mapped libs (genuine kthreads have none).\n"
+#ifdef __APPLE__
+"  Hunt   : ps -axo pid,comm | grep -E '^ *[0-9]+ \\['   # find fake kthreads\n"
+"           then: ps -p <pid> -o args   and   lsof -p <pid> | grep txt\n"
+"           (a genuine kernel task has no userland executable mapped).\n"
+#else
 "  Hunt   : for p in /proc/[0-9]*; do n=$(tr -d '\\0' <$p/comm);\n"
 "           case $n in \\[*\\]) readlink $p/exe 2>/dev/null && \\\n"
 "             echo \"FAKE KTHREAD: $p ($n)\";; esac; done\n"
+#endif
 "  EDR    : argv[0] != backing file name; PR_SET_NAME via prctl.\n"
 "  ─────────────────────────────────────────────────────────────\n", stderr);
 }
@@ -148,7 +171,11 @@ hint_hide(void)
 "  IOCs   : executable dot-file in $HOME; mtime copied from a system\n"
 "           binary while ctime stays 'now' (timestomp can't fake ctime).\n"
 "  Hunt   : find ~ -maxdepth 1 -name '.*' -type f -perm -u+x\n"
+#ifdef __APPLE__
+"           stat -f '%N mtime=%m ctime=%c' ~/.wetland-lab   # ctime>>mtime\n"
+#else
 "           stat -c '%n mtime=%Y ctime=%Z' ~/.wetland-lab   # ctime>>mtime\n"
+#endif
 "  ─────────────────────────────────────────────────────────────\n", stderr);
 }
 
@@ -396,10 +423,19 @@ do_hide(int argc, char **argv, const char *argv0)
 	/* timestomp: steal mtime/atime from a system binary (T1070.006) */
 	struct stat st;
 	if (stat(ref, &st) == 0) {
-		struct timespec times[2];
-		times[0] = st.st_atim;
-		times[1] = st.st_mtim;
-		if (utimensat(AT_FDCWD, dest, times, 0) == 0)
+		/* Darwin names these st_*timespec; Linux names them st_*tim.
+		 * utimes() takes timeval, so one code path serves both. */
+#if defined(__APPLE__)
+		struct timespec at = st.st_atimespec, mt = st.st_mtimespec;
+#else
+		struct timespec at = st.st_atim, mt = st.st_mtim;
+#endif
+		struct timeval tv[2];
+		tv[0].tv_sec  = at.tv_sec;
+		tv[0].tv_usec = (suseconds_t)(at.tv_nsec / 1000);
+		tv[1].tv_sec  = mt.tv_sec;
+		tv[1].tv_usec = (suseconds_t)(mt.tv_nsec / 1000);
+		if (utimes(dest, tv) == 0)
 			labf("hide: timestomped mtime/atime from %s (%ld)",
 			    ref, (long)st.st_mtime);
 		else
