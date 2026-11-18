@@ -157,13 +157,19 @@ hint_beacon(void)
 {
 	fputs(
 "\n  ── detection hint ───────────────────────────────────────────\n"
-"  ATT&CK : T1071.001 (Web C2) / T1573 (Encrypted Channel) / T1008\n"
-"  IOCs   : regular outbound connections to :443 at a fixed cadence\n"
-"           (+/- jitter), tiny request, little/no response. NOT real\n"
-"           TLS, so a TLS parser / JA3 pipeline sees a malformed or\n"
-"           unknown fingerprint on 443 -> itself a signal.\n"
-"  Hunt   : NetFlow/Zeek: beaconing by connection-interval regularity;\n"
-"           443 traffic with no TLS ClientHello; low bytes-up/down ratio.\n"
+"  ATT&CK : T1071.001 (Web C2) / T1573 (Encrypted Channel) /\n"
+"           T1571 (Non-Standard Port) / T1008 (Fallback Channels)\n"
+"  Model  : centralized C2 — the implant checks in to a C2 server on a\n"
+"           fixed cadence (+/- jitter). --as shapes the check-in:\n"
+"             raw  = opaque bytes (encrypted-channel look)\n"
+"             http = GET request with a browser UA (web C2)\n"
+"             tls  = TLS-ClientHello-shaped bytes (odd/own JA3)\n"
+"  IOCs   : periodic outbound to one host; low bytes-up/down ratio;\n"
+"           as=http -> fixed UA / odd URI; as=tls -> ClientHello that no\n"
+"           real browser sent (JA3/JARM mismatch); as=raw on :443 ->\n"
+"           bytes on 443 with no TLS handshake at all.\n"
+"  Hunt   : NetFlow/Zeek beaconing by connection-interval regularity;\n"
+"           JA3/JARM allow-listing; UA + URI entropy; dest-IP rarity.\n"
 "  ─────────────────────────────────────────────────────────────\n", stderr);
 }
 
@@ -414,11 +420,47 @@ static volatile int g_stop = 0;
 #include <signal.h>
 static void on_sigint(int s) { (void)s; g_stop = 1; }
 
+/* Build one beacon payload shaped as raw/http/tls. Returns its length. */
+static long
+beacon_payload(unsigned char *buf, size_t cap, const char *as,
+               const char *host, long rawsize)
+{
+	if (strcmp(as, "http") == 0) {
+		/* looks like web C2 traffic (T1071.001) */
+		int n = snprintf((char *)buf, cap,
+		    "GET /%08x HTTP/1.1\r\nHost: %s\r\n"
+		    "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\n"
+		    "Accept: */*\r\nConnection: keep-alive\r\n\r\n",
+		    (unsigned)rand(), host);
+		return (n > 0 && (size_t)n < cap) ? n : 0;
+	}
+	if (strcmp(as, "tls") == 0) {
+		/* minimal TLS-record-shaped bytes: a ClientHello-looking prefix so an
+		 * L7/JA3 parser sees "TLS on this port" but an odd/own fingerprint */
+		size_t body = 60;
+		if (body + 9 > cap) body = cap - 9;
+		unsigned char *p = buf;
+		*p++ = 0x16; *p++ = 0x03; *p++ = 0x01;          /* Handshake, TLS 1.0 rec */
+		*p++ = (unsigned char)((body + 4) >> 8); *p++ = (unsigned char)((body + 4) & 0xff);
+		*p++ = 0x01;                                    /* ClientHello */
+		*p++ = 0x00; *p++ = (unsigned char)(body >> 8); *p++ = (unsigned char)(body & 0xff);
+		for (size_t i = 0; i < body; i++) p[i] = (unsigned char)rand();
+		return (long)(9 + body);
+	}
+	/* raw: opaque random bytes (encrypted-channel look) */
+	if (rawsize < 1) rawsize = 1;
+	if ((size_t)rawsize > cap) rawsize = (long)cap;
+	for (long i = 0; i < rawsize; i++) buf[i] = (unsigned char)rand();
+	return rawsize;
+}
+
 static int
 do_beacon(int argc, char **argv)
 {
 	const char *host = NULL, *port = "443";
+	const char *as = "raw", *profile = NULL;
 	long interval = 30, jitter = 20, count = 0, size = 64;
+	int iv_set = 0, jt_set = 0;
 	for (int i = 0; i < argc; i++) {
 		if (is_opt(argv[i], "--to") && i + 1 < argc) {
 			char *s = argv[++i];
@@ -426,13 +468,25 @@ do_beacon(int argc, char **argv)
 			if (c) { *c = '\0'; host = s; port = c + 1; }
 			else host = s;
 		}
-		else if (is_opt(argv[i], "--interval") && i + 1 < argc) interval = atol(argv[++i]);
-		else if (is_opt(argv[i], "--jitter") && i + 1 < argc) jitter = atol(argv[++i]);
+		else if (is_opt(argv[i], "--interval") && i + 1 < argc) { interval = atol(argv[++i]); iv_set = 1; }
+		else if (is_opt(argv[i], "--jitter") && i + 1 < argc) { jitter = atol(argv[++i]); jt_set = 1; }
 		else if (is_opt(argv[i], "--count") && i + 1 < argc) count = atol(argv[++i]);
 		else if (is_opt(argv[i], "--size") && i + 1 < argc) size = atol(argv[++i]);
+		else if (is_opt(argv[i], "--as") && i + 1 < argc) as = argv[++i];
+		else if (is_opt(argv[i], "--profile") && i + 1 < argc) profile = argv[++i];
 		else { labf("beacon: unknown arg '%s'", argv[i]); return 2; }
 	}
 	if (host == NULL) { labf("beacon: need --to HOST[:PORT]"); return 2; }
+	if (strcmp(as, "raw") && strcmp(as, "http") && strcmp(as, "tls")) {
+		labf("beacon: --as must be raw|http|tls"); return 2;
+	}
+	/* C2 cadence presets; explicit --interval/--jitter still win */
+	if (profile != NULL) {
+		if      (strcmp(profile, "hourly") == 0)     { if (!iv_set) interval = 3600; if (!jt_set) jitter = 15; }
+		else if (strcmp(profile, "aggressive") == 0) { if (!iv_set) interval = 10;   if (!jt_set) jitter = 30; }
+		else if (strcmp(profile, "lowslow") == 0)    { if (!iv_set) interval = 1800; if (!jt_set) jitter = 50; }
+		else { labf("beacon: --profile must be hourly|aggressive|lowslow"); return 2; }
+	}
 	if (size < 1) size = 1;
 	if (size > 4096) size = 4096;
 	if (interval < 1) interval = 1;
@@ -443,12 +497,13 @@ do_beacon(int argc, char **argv)
 	signal(SIGINT, on_sigint);
 	srand((unsigned)(time(NULL) ^ getpid()));
 
-	labf("beacon: -> %s:%s every %lds +/-%ld%% size=%ldB count=%s",
-	    host, port, interval, jitter, size,
+	labf("beacon: C2 -> %s:%s every %lds +/-%ld%% as=%s%s%s count=%s",
+	    host, port, interval, jitter, as,
+	    profile ? " profile=" : "", profile ? profile : "",
 	    count ? "(fixed)" : "inf (Ctrl-C to stop)");
 	hint_beacon();
 
-	unsigned char *buf = malloc((size_t)size);
+	unsigned char *buf = malloc(4096);
 	if (buf == NULL) return 1;
 
 	long sent = 0;
@@ -457,14 +512,14 @@ do_beacon(int argc, char **argv)
 		char ts[32]; time_t now = time(NULL);
 		strftime(ts, sizeof ts, "%H:%M:%S", localtime(&now));
 		if (fd >= 0) {
-			for (long i = 0; i < size; i++) buf[i] = (unsigned char)rand();
-			wld_write_all(fd, buf, (size_t)size);
-			char rb[64];
-			(void)wld_sock_read(fd, rb, sizeof rb); /* best-effort */
+			long n = beacon_payload(buf, 4096, as, host, size);
+			wld_write_all(fd, buf, (size_t)n);
+			char rb[256];
+			(void)wld_sock_read(fd, rb, sizeof rb); /* read tasking, best-effort */
 			wld_closesocket(fd);
-			labf("beacon #%ld @%s: sent %ldB to %s:%s", sent + 1, ts, size, host, port);
+			labf("beacon #%ld @%s: check-in %ldB (%s) to %s:%s", sent + 1, ts, n, as, host, port);
 		} else {
-			labf("beacon #%ld @%s: connect to %s:%s failed", sent + 1, ts, host, port);
+			labf("beacon #%ld @%s: C2 %s:%s unreachable", sent + 1, ts, host, port);
 		}
 		sent++;
 		if (count && sent >= count) break;
@@ -476,7 +531,7 @@ do_beacon(int argc, char **argv)
 		for (long s = 0; s < delay && !g_stop; s++) sleep(1);
 	}
 	free(buf);
-	labf("beacon: stopped after %ld beacon(s).", sent);
+	labf("beacon: stopped after %ld check-in(s).", sent);
 	return 0;
 }
 
@@ -543,9 +598,11 @@ lab_usage(void)
 "      T1564.001 / T1070.006: copy self to an executable dot-file and\n"
 "      timestomp it from a system binary.\n"
 "\n"
-"  beacon --to HOST[:PORT] [--interval S] [--jitter PCT] [--count N] [--size B]\n"
-"      T1071/T1573: periodic jittered outbound beacons (default :443, 30s,\n"
-"      20%, infinite). NOT real TLS.\n"
+"  beacon --to HOST[:PORT] [--interval S] [--jitter PCT] [--count N]\n"
+"         [--size B] [--as raw|http|tls] [--profile hourly|aggressive|lowslow]\n"
+"      T1071/T1573/T1571: centralized-C2 check-ins to a C2 server on a\n"
+"      jittered cadence (default :443, 30s, 20%). --as shapes the traffic\n"
+"      (raw bytes / web GET / TLS-ClientHello-shaped). NOT real TLS.\n"
 "\n"
 "  uninstall        remove every " LAB_MARKER " artifact this tool creates.\n"
 "  detections       print the ATT&CK -> detection mapping for all techniques.\n",

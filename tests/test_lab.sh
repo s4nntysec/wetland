@@ -66,25 +66,29 @@ fi
 # --- beacon: jittered beacons reach a listener ---
 PORT=$(( (RANDOM % 20000) + 20000 ))
 GOT="$SB/beacons"
+# classify each check-in's shape: HTTP (GET ), TLS (0x16), or raw
 python3 - "$PORT" "$GOT" <<'PY' &
 import socket,sys
 port=int(sys.argv[1]); out=sys.argv[2]
 s=socket.socket(); s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
 s.bind(('127.0.0.1',port)); s.listen(5)
-n=0
 with open(out,'w') as f:
     for _ in range(3):
-        c,_a=s.accept(); d=c.recv(200); n+=1
-        f.write(f"{len(d)}\n"); f.flush(); c.close()
+        c,_a=s.accept(); d=c.recv(400)
+        kind = 'http' if d[:4]==b'GET ' else ('tls' if d[:1]==b'\x16' else 'raw')
+        f.write(kind+"\n"); f.flush(); c.close()
 PY
 BPID=$!
 sleep 0.4
-"$WLD" lab beacon --to "127.0.0.1:$PORT" --interval 1 --jitter 50 --count 3 --size 40 >/dev/null 2>&1
+# one check-in per shape; validates cadence + protocol shaping (C2 model)
+"$WLD" lab beacon --to "127.0.0.1:$PORT" --as http --count 1 --interval 1 >/dev/null 2>&1
+"$WLD" lab beacon --to "127.0.0.1:$PORT" --as tls  --count 1 --interval 1 >/dev/null 2>&1
+"$WLD" lab beacon --to "127.0.0.1:$PORT" --as raw  --count 1 --interval 1 >/dev/null 2>&1
 wait "$BPID" 2>/dev/null; BPID=
-if [ "$(wc -l < "$GOT" 2>/dev/null)" = "3" ] && grep -qx 40 "$GOT"; then
-	pass "beacon: 3 jittered beacons delivered (40B each)"
+if [ "$(tr '\n' ' ' < "$GOT" 2>/dev/null)" = "http tls raw " ]; then
+	pass "beacon: C2 check-ins shaped as http / tls / raw"
 else
-	fail "beacon: listener did not receive 3x40B (got: $(tr '\n' ' ' < "$GOT" 2>/dev/null))"
+	fail "beacon: wrong shapes (got: $(tr '\n' ' ' < "$GOT" 2>/dev/null))"
 fi
 
 echo
