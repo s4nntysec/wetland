@@ -37,7 +37,7 @@ The project is written in C with **no external dependencies**, and builds for
 4. [Using the client (`wld`)](#using-the-client-wld)
 5. [Command reference](#command-reference)
 6. [Public relay pool (`-x`)](#public-relay-pool--x)
-7. [Zero-config tunnel (bore.pub)](#zero-config-tunnel-borepub)
+7. [Zero-config tunnel (frp)](#zero-config-tunnel-frp)
 8. [How it works](#how-it-works)
 9. [Security notes](#security-notes)
 10. [Purple-team lab (`wld lab`)](#purple-team-lab-wld-lab)
@@ -267,44 +267,63 @@ pool.
 
 ---
 
-## Zero-config tunnel (bore.pub)
+## Zero-config tunnel (frp)
 
 If you run a **listener** (`-l`) with **no relay configured** (no `-H`, no `-x`,
 no `$WLD_RELAY_HOST`) and nothing is already listening on the default relay port,
 `wld` bootstraps everything itself:
 
 1. starts a **relay in-process** (on `127.0.0.1`, an ephemeral port), and
-2. exposes it through a **[bore](https://github.com/ekzhang/bore) reverse tunnel**
-   to the public `bore.pub` server,
+2. exposes it through an **[frp](https://github.com/fatedier/frp) reverse tunnel**
+   to your frp server,
 
 then prints the exact command for the other side:
 
 ```sh
+export WLD_FRP_SERVER=frp.example.com      # your frps host
+export WLD_FRP_TOKEN=yoursecret            # if frps has auth.token
+
 $ wld -g -l -i
 wld: generated secret: 7Kp9mXr...
-wld: no relay configured — starting embedded relay + bore.pub tunnel...
-wld: tunnel up at bore.pub:43187 — the other side runs:
-       wld -s <secret> -H bore.pub -p 43187 -i
+wld: no relay configured — starting embedded relay + frp tunnel via frp.example.com...
+wld: tunnel up at frp.example.com:43187 — the other side runs:
+       wld -s <secret> -H frp.example.com -p 43187 -i
 ```
 
-The connector just runs that line. No VPS, no port forwarding, no relay setup.
-The relay is still **blind** (sees only the 16-byte address + ciphertext), and
-the end-to-end encryption is unchanged — bore only moves bytes.
+The connector just runs that line. The relay stays **blind** (sees only the
+16-byte address + ciphertext); frp only moves bytes, so the end-to-end
+encryption is unchanged.
 
-**Self-hosting bore:** point the tunnel at your own bore server instead of
-`bore.pub` with `WLD_BORE_HOST` (and `WLD_BORE_PORT`, default `7835`):
+> **frp has no public server** — unlike some tunnels, you run **frps** yourself
+> on a public host (any free VM works; see [Public relay pool](#public-relay-pool--x)
+> for options). This client speaks frp's protocol natively (no `frpc` binary),
+> but to stay dependency-light it does **not** implement yamux or TLS, so your
+> **frps must set `transport.tcpMux = false`** and accept plaintext control
+> connections (the default). Minimal `frps.toml`:
+> ```toml
+> bindPort = 7000
+> auth.token = "yoursecret"      # optional
+> transport.tcpMux = false       # required for this client
+> ```
 
-```sh
-export WLD_BORE_HOST=bore.example.com      # your `bore server`
-wld -g -l -i
-```
+Environment:
+
+| Variable | Meaning |
+|----------|---------|
+| `WLD_FRP_SERVER` | frps host (required to enable the tunnel) |
+| `WLD_FRP_PORT` | frps `bindPort` (default `7000`) |
+| `WLD_FRP_TOKEN` | frps `auth.token` (omit if none) |
+| `WLD_FRP_REMOTE_PORT` | fixed public port (default: derived from the secret) |
 
 Notes:
+- By default the public port is **derived from the secret**, so a given secret
+  maps to the same port on your frps (subject to frps `allowPorts`); override
+  with `WLD_FRP_REMOTE_PORT`.
 - The embedded relay and tunnel run in background threads of the listener
-  process; on a one-shot pipe send (`wld -l < file`) `wld` waits for the
-  transfer to drain before exiting.
-- Needs outbound TCP to the bore server's control port (`7835`). If it can't be
-  reached, `wld` falls back to a **local-only** relay and says so.
+  process; on a one-shot pipe send (`wld -l < file`) `wld` waits for the transfer
+  to drain before exiting.
+- If `WLD_FRP_SERVER` is unset, or the tunnel fails, `wld` says so and (on
+  failure) falls back to a **local-only** relay.
 - POSIX only (Linux/macOS); on Windows, pass a relay with `-H`/`-x`.
 
 ---
@@ -443,6 +462,21 @@ export WLD_RELAY_POOL="relay1.example.net:7440,relay2.example.net,203.0.113.7:90
 ```
 See [Public relay pool](#public-relay-pool--x).
 
+### `wld: frp tunnel failed — relay is LOCAL-ONLY ...`
+
+The zero-config frp tunnel could not be set up. Check, in order:
+
+- `WLD_FRP_SERVER` points at a reachable **frps** and `WLD_FRP_PORT` matches its
+  `bindPort` (default `7000`). Test: `timeout 5 bash -c 'exec 3<>/dev/tcp/$WLD_FRP_SERVER/7000 && echo ok'`.
+- The frps has **`transport.tcpMux = false`** — this client does not speak yamux,
+  so a muxed frps will fail the tunnel.
+- `WLD_FRP_TOKEN` matches the frps `auth.token` (login fails otherwise).
+- The requested public port is allowed by frps `allowPorts`; pin a known-good one
+  with `WLD_FRP_REMOTE_PORT`.
+- Run with `-v` to see the frp handshake (`[wld-frp] ...`) and the exact failure.
+
+See [Zero-config tunnel (frp)](#zero-config-tunnel-frp).
+
 ### The interactive shell (`-i`) does nothing / looks frozen
 
 `-i` needs a **real terminal** on both sides. It won't behave in a pipe, a CI job
@@ -497,11 +531,11 @@ src/wld_net.{c,h}      socket helpers
 src/wld_proto.h        relay wire protocol and framing constants
 src/wld_relay.{c,h}    embeddable relay core (serve loop)
 src/relay.c            wetland-relay: thin CLI wrapper around the core
-src/wld_bore.{c,h}     bore-style reverse-tunnel client (zero-config listener)
+src/wld_frp.{c,h}      native frp reverse-tunnel client (zero-config listener)
 src/client.c           wld: the client (pipe, exec and PTY modes)
 src/wld_lab.{c,h}      purple-team lab: documented, reversible TTP sims
 src/monocypher/        bundled cryptographic code
-tests/                 crypto unit, end-to-end, lab and bore tunnel tests
+tests/                 crypto unit, end-to-end, lab and frp tunnel tests
 docs/PROTOCOL.md       wire format and key schedule
 docs/PURPLE-LAB.md     purple-team lab: ATT&CK -> detection mapping
 ```
@@ -513,8 +547,8 @@ make test
 ```
 
 This runs the crypto unit tests, an end-to-end test that starts a relay and two
-clients on localhost, a smoke test of the `wld lab` techniques, and a bore
-auto-tunnel test against a local stand-in bore server.
+clients on localhost, a smoke test of the `wld lab` techniques, and an frp
+auto-tunnel test against a local stand-in frp server.
 
 The CI workflow (`.github/workflows/build.yml`) builds and tests on Linux,
 macOS and Windows, and uploads the binaries as artifacts.
@@ -524,8 +558,8 @@ macOS and Windows, and uploads the binaries as artifacts.
 ## Roadmap
 
 Done since the first version: a secret-derived **public relay pool** (`-x`), a
-**zero-config bore.pub tunnel** for NAT'd listeners, and a **purple-team lab**
-module (`wld lab`).
+**zero-config frp tunnel** for NAT'd listeners (native frp client), and a
+**purple-team lab** module (`wld lab`).
 
 Not yet implemented:
 

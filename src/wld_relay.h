@@ -2,7 +2,7 @@
  * wetland — embeddable relay core.
  *
  * The rendezvous server loop, factored out of the `wetland-relay` binary so the
- * client can also run a relay in-process (see the bore-style auto-tunnel in
+ * client can also run a relay in-process (see the frp auto-tunnel in
  * client.c). Single-threaded, poll(2) based; one instance per process.
  */
 #ifndef WLD_RELAY_H

@@ -2,7 +2,7 @@
  * wetland-relay — the rendezvous server (thin CLI wrapper).
  *
  * The actual serve loop lives in wld_relay.c (wld_relay_serve), so the client
- * can embed a relay in-process for the bore-style auto-tunnel.
+ * can embed a relay in-process for the frp auto-tunnel.
  */
 #include "wld_proto.h"
 #include "wld_net.h"
