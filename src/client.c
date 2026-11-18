@@ -15,9 +15,7 @@
 #include "wld_crypto.h"
 #include "wld_tunnel.h"
 #include "wld_lab.h"
-#include "wld_bore.h"
-#include "wld_frp.h"
-#include "wld_pinggy.h"
+#include "wld_autotunnel.h"
 
 #include "wld_compat.h"
 
@@ -380,6 +378,7 @@ main(int argc, char **argv)
 	const char *host = getenv("WLD_RELAY_HOST");
 	const char *port = getenv("WLD_RELAY_PORT");
 	int relay_specified = (host != NULL);
+	long tunnel_expiry_secs = 0;   /* >0 => warn the connector (pinggy) */
 	int opt;
 
 	while ((opt = getopt(argc, argv, "s:k:gliwe:R:H:p:xvh")) != -1) {
@@ -474,44 +473,10 @@ main(int argc, char **argv)
 			wld_closesocket(probe);
 			VLOG("wld: using relay already running at %s:%s\n", host, port);
 		} else {
-			const char *frp_server = getenv("WLD_FRP_SERVER");
-			const char *bore_host  = getenv("WLD_BORE_HOST");
 			static char lport[16], pubhost[256];
-			int pubport = 0, r;
-
-			if (frp_server != NULL && frp_server[0] != '\0') {
-				/* self-hosted frp backend */
-				const char *frp_port  = getenv("WLD_FRP_PORT");  /* default 7000 */
-				const char *frp_token = getenv("WLD_FRP_TOKEN");
-				const char *frp_rport = getenv("WLD_FRP_REMOTE_PORT");
-				int req;
-				if (frp_rport && frp_rport[0]) req = atoi(frp_rport);
-				else {
-					uint8_t sel[WLD_ADDR_LEN];
-					wld_derive(secret, 0, sel, NULL, NULL);
-					uint64_t v = 0;
-					for (int i = 0; i < 8; i++) v = (v << 8) | sel[i];
-					req = 1024 + (int)(v % 64000);
-				}
-				fprintf(stderr, "wld: no relay configured — embedded relay + "
-				    "frp tunnel via %s...\n", frp_server);
-				r = wld_frp_autotunnel(frp_server, frp_port, frp_token, req,
-				    g_verbose, lport, sizeof lport, pubhost, sizeof pubhost, &pubport);
-			} else if (bore_host != NULL && bore_host[0] != '\0') {
-				/* bore backend (explicit server; ask it to choose the port) */
-				const char *bore_rport = getenv("WLD_BORE_REMOTE_PORT");
-				int req = (bore_rport && bore_rport[0]) ? atoi(bore_rport) : 0;
-				fprintf(stderr, "wld: no relay configured — embedded relay + "
-				    "%s tunnel...\n", bore_host);
-				r = wld_bore_autotunnel(bore_host, req, g_verbose,
-				    lport, sizeof lport, pubhost, sizeof pubhost, &pubport);
-			} else {
-				/* default: pinggy (free, no account; needs an ssh client) */
-				fprintf(stderr, "wld: no relay configured — embedded relay + "
-				    "pinggy tunnel...\n");
-				r = wld_pinggy_autotunnel(g_verbose,
-				    lport, sizeof lport, pubhost, sizeof pubhost, &pubport);
-			}
+			int pubport = 0;
+			int r = wld_open_tunnel(secret, g_verbose, lport, sizeof lport,
+			    pubhost, sizeof pubhost, &pubport, &tunnel_expiry_secs);
 
 			if (r == 0) {
 				host = "127.0.0.1";
@@ -579,6 +544,30 @@ main(int argc, char **argv)
 
 	wld_wipe(psk, sizeof psk);
 
+	/*
+	 * One-way post-handshake greeting (listener -> connector). The listener
+	 * stays quiet; only the connector prints it. Used to warn about a tunnel
+	 * that will expire. Always exchanged (empty when nothing to say) so both
+	 * sides' record counters advance together.
+	 */
+	if (listen_mode) {
+		char greet[256];
+		greet[0] = '\0';
+		if (tunnel_expiry_secs > 0)
+			snprintf(greet, sizeof greet,
+			    "wld: note — this link uses a free pinggy tunnel that expires in "
+			    "~%ld min; if it drops, reconnect with the address the operator "
+			    "shares.", tunnel_expiry_secs / 60);
+		if (wld_tunnel_send_greeting(tun, &sess, greet) != 0)
+			die("greeting failed");
+	} else {
+		char greet[512];
+		if (wld_tunnel_recv_greeting(tun, &sess, greet, sizeof greet) != 0)
+			die("greeting failed");
+		if (greet[0] != '\0')
+			fprintf(stderr, "%s\n", greet);
+	}
+
 	int rc;
 #ifdef _WIN32
 	if (listen_mode && (interactive || cmd != NULL)) {
@@ -607,10 +596,8 @@ main(int argc, char **argv)
 	wld_closesocket(tun);
 #ifndef _WIN32
 	/* If we auto-started a tunnel, let any in-flight proxied data finish before
-	 * the process (and its relay/proxy threads) exits. No-ops otherwise. */
-	wld_bore_drain(10000);
-	wld_frp_drain(10000);
-	wld_pinggy_drain(10000);
+	 * the process (and its relay/proxy threads) exits. No-op otherwise. */
+	wld_tunnel_drain_all(10000);
 #endif
 	free(gen);
 	return rc == 0 ? 0 : 1;

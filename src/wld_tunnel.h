@@ -19,4 +19,14 @@
  */
 int wld_pump(int tun_fd, int local_rd, int local_wr, wld_session *sess);
 
+/*
+ * One-way post-handshake greeting, done on the blocking socket before wld_pump.
+ * The responder (listener) sends exactly one record; the initiator (connector)
+ * receives exactly one. Both advance their counters by one, keeping the pump in
+ * sync. `msg` is a short text note (may be empty). Return 0 on success, -1 on
+ * I/O or authentication error. These MUST be called in matched pairs.
+ */
+int wld_tunnel_send_greeting(int fd, wld_session *sess, const char *msg);
+int wld_tunnel_recv_greeting(int fd, wld_session *sess, char *out, size_t cap);
+
 #endif /* WLD_TUNNEL_H */

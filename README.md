@@ -353,6 +353,10 @@ Notes:
   process; on a one-shot pipe send (`wld -l < file`) `wld` waits for the transfer
   to drain before exiting.
 - POSIX only (Linux/macOS); on Windows, pass a relay with `-H`/`-x`.
+- When the listener rides an expiring tunnel (pinggy), it sends a one-time
+  heads-up right after the handshake that the **connector prints** (the listener
+  stays quiet): `wld: note — this link uses a free pinggy tunnel that expires in
+  ~55 min; ...`.
 
 ---
 
@@ -415,6 +419,10 @@ wld lab beacon --to c2:443 --as tls --profile hourly  # T1071/T1573/T1571 (C2)
 wld lab detections                           # print the full detection mapping
 wld lab uninstall                            # remove every WETLAND-LAB artifact
 ```
+
+Any `wld lab` technique also takes **`--tunnel`**, which opens the same
+zero-config public tunnel as `wld -l` (embedded relay + pinggy/bore/frp) and
+prints the public `host:port` before running the technique.
 
 Each technique also has a **shortcut** — drop the `lab` word and call it
 directly:
@@ -571,6 +579,7 @@ src/wld_net.{c,h}      socket helpers
 src/wld_proto.h        relay wire protocol and framing constants
 src/wld_relay.{c,h}    embeddable relay core (serve loop)
 src/relay.c            wetland-relay: thin CLI wrapper around the core
+src/wld_autotunnel.{c,h}  zero-config tunnel selector (shared by -l and wld lab)
 src/wld_pinggy.{c,h}   pinggy tunnel backend via ssh (zero-config default)
 src/wld_bore.{c,h}     native bore reverse-tunnel client (alt backend)
 src/wld_frp.{c,h}      native frp reverse-tunnel client (self-hosted option)

@@ -24,9 +24,13 @@ wld lab <technique> [options]
               [--size B] [--as raw|http|tls] [--profile hourly|aggressive|lowslow]
   uninstall
   detections
+
+  <technique> --tunnel     also open the zero-config public tunnel (like `wld -l`)
 ```
 
 `wld lab detections` prints the whole mapping below without executing anything.
+`--tunnel` on any technique brings up the embedded relay + a public tunnel
+(pinggy/bore/frp) and prints the public `host:port`.
 
 ---
 

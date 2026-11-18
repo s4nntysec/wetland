@@ -13,6 +13,7 @@
 #include "wld_lab.h"
 #include "wld_compat.h"
 #include "wld_net.h"
+#include "wld_autotunnel.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -641,7 +642,11 @@ lab_usage(void)
 "      (raw bytes / web GET / TLS-ClientHello-shaped). NOT real TLS.\n"
 "\n"
 "  uninstall        remove every " LAB_MARKER " artifact this tool creates.\n"
-"  detections       print the ATT&CK -> detection mapping for all techniques.\n",
+"  detections       print the ATT&CK -> detection mapping for all techniques.\n"
+"\n"
+"  --tunnel         (any technique) also open the zero-config public tunnel\n"
+"                   (same as `wld -l`: embedded relay + pinggy/bore/frp), and\n"
+"                   print the public host:port.\n",
 	    stderr);
 	return 1;
 }
@@ -657,29 +662,60 @@ wld_lab_main(int argc, char **argv)
 	int ti = (argc >= 2 && strcmp(argv[1], "lab") == 0) ? 2 : 1;
 	if (argc <= ti) return lab_usage();
 	const char *tech = argv[ti];
-	int sub_argc = argc - (ti + 1);
-	char **sub_argv = argv + (ti + 1);
 
+	/* Pull out an optional, explicit `--tunnel`: brings up the embedded relay
+	 * + zero-config public tunnel (same as `wld -l`) before the technique runs,
+	 * so a lab command can be reached from outside. Opt-in, printed, not wired
+	 * into `-l`. The remaining args are passed through to the technique. */
+	int want_tunnel = 0;
+	int raw_argc = argc - (ti + 1);
+	char **raw = argv + (ti + 1);
+	char **sub_argv = malloc(sizeof(char *) * (size_t)(raw_argc + 1));
+	if (sub_argv == NULL) return 1;
+	int sub_argc = 0;
+	for (int i = 0; i < raw_argc; i++) {
+		if (strcmp(raw[i], "--tunnel") == 0) { want_tunnel = 1; continue; }
+		sub_argv[sub_argc++] = raw[i];
+	}
+	sub_argv[sub_argc] = NULL;
+
+	if (want_tunnel) {
+		static char lport[16], pubhost[256];
+		int pubport = 0; long exp = 0;
+		if (wld_open_tunnel("wld-lab", 1, lport, sizeof lport,
+		    pubhost, sizeof pubhost, &pubport, &exp) == 0)
+			labf("tunnel up — public %s:%d (reaches the embedded relay)",
+			    pubhost, pubport);
+		else
+			labf("tunnel failed; continuing local-only");
+	}
+
+	int rc;
 	if (strcmp(tech, "masquerade") == 0)
-		return do_masquerade(sub_argc, sub_argv, argv, argc);
-	if (strcmp(tech, "persist") == 0)
-		return do_persist(sub_argc, sub_argv);
-	if (strcmp(tech, "hide") == 0)
-		return do_hide(sub_argc, sub_argv, argv[0]);
-	if (strcmp(tech, "beacon") == 0)
-		return do_beacon(sub_argc, sub_argv);
-	if (strcmp(tech, "uninstall") == 0)
-		return do_uninstall();
-	if (strcmp(tech, "detections") == 0) {
+		rc = do_masquerade(sub_argc, sub_argv, argv, argc);
+	else if (strcmp(tech, "persist") == 0)
+		rc = do_persist(sub_argc, sub_argv);
+	else if (strcmp(tech, "hide") == 0)
+		rc = do_hide(sub_argc, sub_argv, argv[0]);
+	else if (strcmp(tech, "beacon") == 0)
+		rc = do_beacon(sub_argc, sub_argv);
+	else if (strcmp(tech, "uninstall") == 0)
+		rc = do_uninstall();
+	else if (strcmp(tech, "detections") == 0) {
 		fprintf(stderr, "wld lab — ATT&CK detection mapping\n");
 		hint_masquerade(); hint_persist(); hint_hide(); hint_beacon();
-		return 0;
+		rc = 0;
 	}
-	if (strcmp(tech, "help") == 0 || strcmp(tech, "-h") == 0)
-		return lab_usage();
+	else if (strcmp(tech, "help") == 0 || strcmp(tech, "-h") == 0)
+		rc = lab_usage();
+	else {
+		labf("unknown technique '%s'", tech);
+		rc = lab_usage();
+	}
 
-	labf("unknown technique '%s'", tech);
-	return lab_usage();
+	free(sub_argv);
+	if (want_tunnel) wld_tunnel_drain_all(10000);
+	return rc;
 }
 
 #endif /* POSIX */

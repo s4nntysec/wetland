@@ -7,6 +7,63 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* ---- post-handshake greeting (one-way: responder -> initiator) -----------
+ *
+ * Immediately after the handshake, on the still-blocking socket, the responder
+ * (listener) sends exactly one AEAD record and the initiator (connector) reads
+ * exactly one. This is a fixed protocol step so the per-direction counters stay
+ * in lock-step with the pump that follows. The payload is a short text note
+ * (e.g. a tunnel-expiry heads-up); an empty note is valid. Record format is the
+ * same [u16 clen][ciphertext] as the transport, AAD = the 2-byte header. */
+
+int
+wld_tunnel_send_greeting(int fd, wld_session *sess, const char *msg)
+{
+	wld_dir_key *k = &sess->tx;
+	size_t pt_len = msg ? strlen(msg) : 0;
+	if (pt_len > WLD_REC_MAX_PLAIN) pt_len = WLD_REC_MAX_PLAIN;
+	if (k->counter == UINT64_MAX) return -1;
+
+	uint8_t nonce[WLD_NONCE_LEN];
+	wld_nonce_from_counter(k->counter, nonce);
+	size_t clen = pt_len + WLD_TAG_LEN;
+	uint8_t hdr[WLD_REC_HDR_LEN] = { (uint8_t)(clen >> 8), (uint8_t)(clen & 0xff) };
+	uint8_t cipher[WLD_REC_MAX_CIPHER];
+	if (wld_aead_seal(k->key, nonce, hdr, sizeof hdr,
+	    (const uint8_t *)(msg ? msg : ""), pt_len, cipher) != 0)
+		return -1;
+	k->counter++;
+	if (wld_write_all(fd, hdr, sizeof hdr) != 0) return -1;
+	if (wld_write_all(fd, cipher, clen) != 0) return -1;
+	return 0;
+}
+
+int
+wld_tunnel_recv_greeting(int fd, wld_session *sess, char *out, size_t cap)
+{
+	wld_dir_key *k = &sess->rx;
+	uint8_t hdr[WLD_REC_HDR_LEN];
+	if (wld_read_all(fd, hdr, sizeof hdr) != 0) return -1;
+	size_t clen = ((size_t)hdr[0] << 8) | hdr[1];
+	if (clen < WLD_TAG_LEN || clen > WLD_REC_MAX_CIPHER) return -1;
+	uint8_t cipher[WLD_REC_MAX_CIPHER];
+	if (wld_read_all(fd, cipher, clen) != 0) return -1;
+
+	uint8_t nonce[WLD_NONCE_LEN];
+	wld_nonce_from_counter(k->counter, nonce);
+	size_t pt_len = clen - WLD_TAG_LEN;
+	uint8_t pt[WLD_REC_MAX_PLAIN];
+	if (wld_aead_open(k->key, nonce, hdr, sizeof hdr, cipher, clen, pt) != 0)
+		return -1;
+	k->counter++;
+	if (out != NULL && cap > 0) {
+		size_t n = (pt_len < cap - 1) ? pt_len : cap - 1;
+		memcpy(out, pt, n);
+		out[n] = '\0';
+	}
+	return 0;
+}
+
 #ifndef _WIN32  /* ===================== POSIX pump (poll) ===================== */
 
 #include <errno.h>
