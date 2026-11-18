@@ -38,6 +38,8 @@ void wld_frp_drain(int max_ms) { (void)max_ms; }
 #include <time.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <netdb.h>
+#include <errno.h>
 
 #define FRP_MSGBUF 16384
 
@@ -60,6 +62,37 @@ static int g_active;
 static void active_inc(void) { pthread_mutex_lock(&g_amx); g_active++; pthread_mutex_unlock(&g_amx); }
 static void active_dec(void) { pthread_mutex_lock(&g_amx); g_active--; pthread_mutex_unlock(&g_amx); }
 static int  active_get(void) { pthread_mutex_lock(&g_amx); int v = g_active; pthread_mutex_unlock(&g_amx); return v; }
+
+/* TCP connect with a timeout (ms): -1 unreachable/timeout, -2 DNS failure. */
+static int
+connect_to(const char *host, const char *port, int ms)
+{
+	struct addrinfo hints, *res = NULL, *rp;
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	if (getaddrinfo(host, port, &hints, &res) != 0) return -2;
+	int fd = -1;
+	for (rp = res; rp != NULL; rp = rp->ai_next) {
+		fd = (int)socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+		if (fd < 0) continue;
+		wld_set_nonblock(fd, 1);
+		int r = connect((SOCKET_CAST)fd, rp->ai_addr, (int)rp->ai_addrlen);
+		if (r == 0) { wld_set_nonblock(fd, 0); break; }
+		if (errno == EINPROGRESS) {
+			wld_pollfd p; p.fd = fd; p.events = POLLOUT;
+			if (wld_poll(&p, 1, ms) == 1) {
+				int err = 0; socklen_t el = sizeof err;
+				getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &el);
+				if (err == 0) { wld_set_nonblock(fd, 0); break; }
+			}
+		}
+		wld_closesocket(fd); fd = -1;
+	}
+	freeaddrinfo(res);
+	if (fd >= 0) wld_set_keepalive(fd);
+	return fd;
+}
 
 static void
 flog(const char *fmt, ...)
@@ -252,7 +285,7 @@ work_thread(void *arg)
 {
 	work_arg *wa = arg;
 
-	int fd = wld_tcp_connect(wa->server_host, wa->server_port);
+	int fd = connect_to(wa->server_host, wa->server_port, 8000);
 	if (fd < 0) { flog("work: reconnect to frps failed"); free(wa); return NULL; }
 
 	char msg[512];
@@ -301,8 +334,10 @@ control_thread(void *arg)
 	char buf[FRP_MSGBUF];
 	char type;
 
-	int fd = wld_tcp_connect(ctx->server_host, ctx->server_port);
-	if (fd < 0) { flog("cannot connect to frps %s:%s", ctx->server_host, ctx->server_port); ctx->ready = -1; return NULL; }
+	flog("connecting to frps %s:%s ...", ctx->server_host, ctx->server_port);
+	int fd = connect_to(ctx->server_host, ctx->server_port, 8000);
+	if (fd == -2) { flog("DNS lookup for %s failed", ctx->server_host); ctx->ready = -1; return NULL; }
+	if (fd < 0) { flog("cannot connect to frps %s:%s (timeout/refused)", ctx->server_host, ctx->server_port); ctx->ready = -1; return NULL; }
 
 	/* Login */
 	long ts = (long)time(NULL);
@@ -448,7 +483,7 @@ wld_frp_autotunnel(const char *server_host, const char *server_port,
 	if (pthread_create(&ct, NULL, control_thread, fctx) != 0) { flog("control thread failed"); return -1; }
 	pthread_detach(ct);
 
-	for (int i = 0; i < 600; i++) {
+	for (int i = 0; i < 1300; i++) {
 		if (fctx->ready != 0) break;
 		struct timespec tsp = { 0, 10 * 1000 * 1000 };
 		nanosleep(&tsp, NULL);

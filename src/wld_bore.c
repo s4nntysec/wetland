@@ -36,6 +36,8 @@ void wld_bore_drain(int max_ms) { (void)max_ms; }
 #include <time.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <netdb.h>
+#include <errno.h>
 
 #define FRAME_MAX 256
 
@@ -47,6 +49,38 @@ static int g_active;                     /* live proxy connections            */
 static void active_inc(void) { pthread_mutex_lock(&g_amx); g_active++; pthread_mutex_unlock(&g_amx); }
 static void active_dec(void) { pthread_mutex_lock(&g_amx); g_active--; pthread_mutex_unlock(&g_amx); }
 static int  active_get(void) { pthread_mutex_lock(&g_amx); int v = g_active; pthread_mutex_unlock(&g_amx); return v; }
+
+/* TCP connect with a timeout (ms), so an unreachable tunnel server fails fast
+ * and with a clear reason instead of blocking far past the startup window. */
+static int
+connect_to(const char *host, const char *port, int ms)
+{
+	struct addrinfo hints, *res = NULL, *rp;
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	if (getaddrinfo(host, port, &hints, &res) != 0) return -2; /* DNS failure */
+	int fd = -1;
+	for (rp = res; rp != NULL; rp = rp->ai_next) {
+		fd = (int)socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+		if (fd < 0) continue;
+		wld_set_nonblock(fd, 1);
+		int r = connect((SOCKET_CAST)fd, rp->ai_addr, (int)rp->ai_addrlen);
+		if (r == 0) { wld_set_nonblock(fd, 0); break; }
+		if (errno == EINPROGRESS) {
+			wld_pollfd p; p.fd = fd; p.events = POLLOUT;
+			if (wld_poll(&p, 1, ms) == 1) {
+				int err = 0; socklen_t el = sizeof err;
+				getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &el);
+				if (err == 0) { wld_set_nonblock(fd, 0); break; }
+			}
+		}
+		wld_closesocket(fd); fd = -1;
+	}
+	freeaddrinfo(res);
+	if (fd >= 0) wld_set_keepalive(fd);
+	return fd; /* -1 unreachable/timeout, -2 DNS */
+}
 
 static void
 blog(const char *fmt, ...)
@@ -197,7 +231,7 @@ proxy_thread(void *arg)
 {
 	proxy_arg *pa = arg;
 
-	int rc = wld_tcp_connect(pa->bore_host, pa->bore_port);
+	int rc = connect_to(pa->bore_host, pa->bore_port, 8000);
 	if (rc < 0) { blog("proxy: cannot reconnect to bore"); free(pa); return NULL; }
 
 	char msg[FRAME_MAX];
@@ -240,8 +274,11 @@ control_thread(void *arg)
 {
 	bore_ctx *ctx = arg;
 
-	int fd = wld_tcp_connect(ctx->bore_host, ctx->bore_port);
-	if (fd < 0) { blog("cannot connect to %s:%s", ctx->bore_host, ctx->bore_port); ctx->ready = -1; return NULL; }
+	blog("connecting to %s:%s ...", ctx->bore_host, ctx->bore_port);
+	int fd = connect_to(ctx->bore_host, ctx->bore_port, 8000);
+	if (fd == -2) { blog("DNS lookup for %s failed", ctx->bore_host); ctx->ready = -1; return NULL; }
+	if (fd < 0)   { blog("cannot connect to %s:%s (timeout/refused)", ctx->bore_host, ctx->bore_port); ctx->ready = -1; return NULL; }
+	blog("connected to %s:%s", ctx->bore_host, ctx->bore_port);
 
 	char hello[FRAME_MAX];
 	snprintf(hello, sizeof hello, "{\"Hello\":%d}", ctx->requested_port);
@@ -378,8 +415,8 @@ wld_bore_autotunnel(const char *bore_host, int requested_port, int verbose,
 	if (pthread_create(&ct, NULL, control_thread, bctx) != 0) { blog("bore thread failed"); return -1; }
 	pthread_detach(ct);
 
-	/* wait for the tunnel handshake (up to ~6s) */
-	for (int i = 0; i < 600; i++) {
+	/* wait for the tunnel handshake (up to ~13s: 8s connect + handshake) */
+	for (int i = 0; i < 1300; i++) {
 		if (bctx->ready != 0) break;
 		struct timespec ts = { 0, 10 * 1000 * 1000 };
 		nanosleep(&ts, NULL);

@@ -519,8 +519,8 @@ main(int argc, char **argv)
 				host = "127.0.0.1";
 				port = lport;
 				fprintf(stderr, "wld: tunnel failed — relay is LOCAL-ONLY on "
-				    "127.0.0.1:%s (same host/LAN). bore.pub blocks some cloud "
-				    "ranges; set WLD_BORE_HOST / WLD_FRP_SERVER, or pass -H.\n",
+				    "127.0.0.1:%s (same host/LAN). Re-run with -v to see why; "
+				    "then set WLD_BORE_HOST / WLD_FRP_SERVER, or pass -H.\n",
 				    lport);
 			} else {
 				die("auto relay/tunnel failed; run wetland-relay and pass -H/-p");
