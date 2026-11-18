@@ -15,6 +15,7 @@
 #include "wld_crypto.h"
 #include "wld_tunnel.h"
 #include "wld_lab.h"
+#include "wld_bore.h"
 #include "wld_frp.h"
 
 #include "wld_compat.h"
@@ -348,10 +349,11 @@ usage(const char *p)
 "  -v          verbose\n"
 "\n"
 "zero-config listener: with -l and no relay set (no -H/-x/$WLD_RELAY_HOST)\n"
-"and nothing on the default relay port, wld starts an embedded relay and an\n"
-"frp reverse tunnel via $WLD_FRP_SERVER (self-hosted frps, tcpMux=false;\n"
-"$WLD_FRP_PORT=7000, $WLD_FRP_TOKEN, $WLD_FRP_REMOTE_PORT), then prints the\n"
-"-H/-p line for the other side.\n"
+"and nothing on the default relay port, wld starts an embedded relay and a\n"
+"public reverse tunnel, then prints the -H/-p line for the other side.\n"
+"  default: bore tunnel via bore.pub (no account; $WLD_BORE_HOST to override)\n"
+"  or self-hosted frp: set $WLD_FRP_SERVER (+ $WLD_FRP_PORT/TOKEN/REMOTE_PORT,\n"
+"  frps with tcpMux=false)\n"
 "\n"
 "examples:\n"
 "  wld -g -l -i                 # serve a shell, prints the secret to share\n"
@@ -453,9 +455,14 @@ main(int argc, char **argv)
 	/*
 	 * Zero-config listener: if no relay was specified and nothing is already
 	 * running on the default relay address, spin up an in-process relay and
-	 * expose it through an frp server (frps), so a listener behind NAT is
-	 * reachable. frp has no public server, so this needs $WLD_FRP_SERVER
-	 * (a self-hosted frps, with transport.tcpMux=false).
+	 * expose it through a public reverse tunnel so a listener behind NAT is
+	 * reachable with no setup.
+	 *
+	 * Default backend is bore (github.com/ekzhang/bore): its public server
+	 * bore.pub needs no account, sessions don't expire, and the client is
+	 * built in (no binary to install on the host) — matching "no account,
+	 * not short-lived, no host dependency". Point it elsewhere with
+	 * WLD_BORE_HOST. If WLD_FRP_SERVER is set instead, use a self-hosted frp.
 	 */
 	if (listen_mode && !use_pool && !relay_specified) {
 		int probe = wld_tcp_connect(host, port);
@@ -464,34 +471,41 @@ main(int argc, char **argv)
 			VLOG("wld: using relay already running at %s:%s\n", host, port);
 		} else {
 			const char *frp_server = getenv("WLD_FRP_SERVER");
-			const char *frp_port   = getenv("WLD_FRP_PORT");   /* default 7000 */
-			const char *frp_token  = getenv("WLD_FRP_TOKEN");  /* may be NULL   */
-			const char *frp_rport  = getenv("WLD_FRP_REMOTE_PORT");
+			static char lport[16], pubhost[256];
+			int pubport = 0, r;
 
-			if (frp_server == NULL || frp_server[0] == '\0') {
-				die("no relay configured and no frp server set.\n"
-				    "       Set WLD_FRP_SERVER=host (self-hosted frps, "
-				    "tcpMux=false), or pass -H/-p, or use -x with WLD_RELAY_POOL.");
-			}
-
-			/* deterministic remote port from the secret unless overridden */
-			int req;
-			if (frp_rport && frp_rport[0]) {
-				req = atoi(frp_rport);
+			if (frp_server != NULL && frp_server[0] != '\0') {
+				/* self-hosted frp backend */
+				const char *frp_port  = getenv("WLD_FRP_PORT");  /* default 7000 */
+				const char *frp_token = getenv("WLD_FRP_TOKEN");
+				const char *frp_rport = getenv("WLD_FRP_REMOTE_PORT");
+				int req;
+				if (frp_rport && frp_rport[0]) req = atoi(frp_rport);
+				else {
+					uint8_t sel[WLD_ADDR_LEN];
+					wld_derive(secret, 0, sel, NULL, NULL);
+					uint64_t v = 0;
+					for (int i = 0; i < 8; i++) v = (v << 8) | sel[i];
+					req = 1024 + (int)(v % 64000);
+				}
+				fprintf(stderr, "wld: no relay configured — embedded relay + "
+				    "frp tunnel via %s...\n", frp_server);
+				r = wld_frp_autotunnel(frp_server, frp_port, frp_token, req,
+				    g_verbose, lport, sizeof lport, pubhost, sizeof pubhost, &pubport);
 			} else {
+				/* default: bore public tunnel (no account, no host binary) */
+				const char *bore_host = getenv("WLD_BORE_HOST"); /* NULL = bore.pub */
 				uint8_t sel[WLD_ADDR_LEN];
 				wld_derive(secret, 0, sel, NULL, NULL);
 				uint64_t v = 0;
 				for (int i = 0; i < 8; i++) v = (v << 8) | sel[i];
-				req = 1024 + (int)(v % 64000);
+				int req = 1024 + (int)(v % 64000);
+				fprintf(stderr, "wld: no relay configured — embedded relay + "
+				    "%s tunnel...\n", bore_host ? bore_host : "bore.pub");
+				r = wld_bore_autotunnel(bore_host, req, g_verbose,
+				    lport, sizeof lport, pubhost, sizeof pubhost, &pubport);
 			}
 
-			static char lport[16], pubhost[256];
-			int pubport = 0;
-			fprintf(stderr, "wld: no relay configured — starting embedded "
-			    "relay + frp tunnel via %s...\n", frp_server);
-			int r = wld_frp_autotunnel(frp_server, frp_port, frp_token, req,
-			    g_verbose, lport, sizeof lport, pubhost, sizeof pubhost, &pubport);
 			if (r == 0) {
 				host = "127.0.0.1";
 				port = lport;
@@ -503,10 +517,10 @@ main(int argc, char **argv)
 			} else if (lport[0] != '\0') {
 				host = "127.0.0.1";
 				port = lport;
-				fprintf(stderr, "wld: frp tunnel failed — relay is "
-				    "LOCAL-ONLY on 127.0.0.1:%s (same host/LAN). Check "
-				    "WLD_FRP_SERVER/WLD_FRP_TOKEN and that frps has "
-				    "tcpMux=false.\n", lport);
+				fprintf(stderr, "wld: tunnel failed — relay is LOCAL-ONLY on "
+				    "127.0.0.1:%s (same host/LAN). bore.pub blocks some cloud "
+				    "ranges; set WLD_BORE_HOST / WLD_FRP_SERVER, or pass -H.\n",
+				    lport);
 			} else {
 				die("auto relay/tunnel failed; run wetland-relay and pass -H/-p");
 			}
@@ -585,8 +599,9 @@ main(int argc, char **argv)
 
 	wld_closesocket(tun);
 #ifndef _WIN32
-	/* If we auto-started an frp tunnel, let any in-flight proxied data finish
-	 * before the process (and its relay/proxy threads) exits. No-op otherwise. */
+	/* If we auto-started a tunnel, let any in-flight proxied data finish before
+	 * the process (and its relay/proxy threads) exits. No-ops otherwise. */
+	wld_bore_drain(10000);
 	wld_frp_drain(10000);
 #endif
 	free(gen);
