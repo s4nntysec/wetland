@@ -56,8 +56,13 @@ C2 connection — that stays in the beacon inject's editable `C2=` line, so the
 scenario is a detection test, not a canned implant deployment. Cleanup removes
 the downloaded file.
 
-The payload downloads from the committed binary:
-`https://raw.githubusercontent.com/s4nntysec/wetland/main/dist/release/wld-<os>-x86_64[.exe]`
+Download source:
+- **Windows** pulls from the published **v0.1.0 Release**, saves it as `wld.exe`,
+  verifies SHA256 + size, then runs `wld -h`:
+  `https://github.com/s4nntysec/wetland/releases/download/v0.1.0/wld-windows-x86_64.exe`
+- **Linux** pulls the committed binary over raw (no release asset assumed):
+  `https://raw.githubusercontent.com/s4nntysec/wetland/main/dist/release/wld-linux-x86_64`
+  (swap to `releases/download/v0.1.0/wld-linux-x86_64` if you add it to the Release).
 
 ### Prefer a GitHub Release (recommended)
 
