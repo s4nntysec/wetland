@@ -46,6 +46,33 @@ persistence → C2 timeline.
 4. Launch the scenario (or schedule it). Review prevention/detection results per
    inject; OpenAEV runs each payload's cleanup afterwards.
 
+## Windows version
+
+`wetland-purple-c2-windows.openaev.zip` is the Windows counterpart — six
+PowerShell (`psh`) injects for Windows assets:
+
+| # | Inject | ATT&CK |
+|---|--------|--------|
+| 1 | Masquerade — fake `svchost.exe` from a user path | T1036.004 / T1036.005 |
+| 2 | Persistence — scheduled task (`schtasks`) | T1053.005 |
+| 3 | Persistence — HKCU `Run` key | T1547.001 |
+| 4 | Hidden file + timestomp | T1564.001 / T1070.006 |
+| 5 | HTTP-shaped C2 beacon | T1071.001 / T1571 |
+| 6 | Ingress tool transfer — **benign EICAR** download via `curl.exe` | T1105 |
+
+### On "pulling the binary onto the machine"
+
+Inject #6 tests the *behaviour* of a tool being fetched to a host (`curl.exe`
+writing a file to disk → proxy/NDR tool-transfer detection, plus endpoint AV
+on-write). It downloads the **EICAR test file** — the industry-standard,
+deliberately harmless detection artifact — **not** the real `wld` implant. For a
+breach-and-attack-simulation that stand-in produces the same download/AV/EDR
+signals, so there is no need to publish and auto-deploy the live C2 binary to
+endpoints. Blue team can also exercise the `certutil` / `bitsadmin` download
+LOLBins noted in the inject. If you run a genuine hands-on-keyboard red-team
+engagement that requires the real tool on a host, deploy it yourself under your
+rules of engagement; `make windows` already builds `dist/windows/wld.exe`.
+
 ## Requirements & notes
 
 - A recent OpenAEV/OpenBAS with the **OpenAEV Implant** injector and a Linux

