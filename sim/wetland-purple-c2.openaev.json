@@ -21,6 +21,351 @@
  "scenario_organizations": [],
  "scenario_injects": [
   {
+   "inject_id": "3bc2c9eb-0e70-5f09-bfd5-fecc6556672e",
+   "inject_title": "Ingress Tool Transfer — pull the wld tool onto the host (T1105)",
+   "inject_description": "First step of the chain: fetch the tool-under-test. curl downloads the wld binary from the project's GitHub and runs `wld -h` (benign — prints usage) to prove download+execute, then cleanup removes it. Detection: curl writing an executable to disk and a new process spawning from it (proxy/NDR tool transfer; EDR exec-after-download).",
+   "inject_country": "",
+   "inject_city": "",
+   "inject_enabled": true,
+   "inject_content": {
+    "obfuscator": "plain-text",
+    "expectations": [
+     {
+      "expectation_type": "DETECTION",
+      "expectation_name": "Detection",
+      "expectation_description": null,
+      "expectation_score": 100,
+      "expectation_expectation_group": false,
+      "expectation_expiration_time": 21600
+     }
+    ],
+    "threatops_command_override": "",
+    "threatops_executor_override": "",
+    "threatops_cleanup_executor_override": "",
+    "threatops_cleanup_command_override": ""
+   },
+   "inject_all_teams": false,
+   "inject_depends_on": [],
+   "inject_depends_duration": 0,
+   "inject_injector_contract": {
+    "convertedContent": {
+     "config": {
+      "type": "openaev_implant",
+      "label": {
+       "fr": "OpenAEV Implant",
+       "en": "OpenAEV Implant"
+      },
+      "color_dark": "#000000",
+      "color_light": "#000000"
+     },
+     "label": {
+      "en": "Ingress tool transfer (wld)",
+      "fr": "Ingress tool transfer (wld)"
+     },
+     "manual": false,
+     "fields": [
+      {
+       "key": "assets",
+       "label": "Source assets",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset"
+      },
+      {
+       "key": "asset_groups",
+       "label": "Source asset groups",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": [
+        "assets",
+        "asset_groups"
+       ],
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "type": "asset-group"
+      },
+      {
+       "key": "obfuscator",
+       "label": "Obfuscators",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "1",
+       "defaultValue": [
+        "plain-text"
+       ],
+       "choices": [
+        {
+         "label": "plain-text",
+         "value": "plain-text"
+        },
+        {
+         "label": "base64",
+         "value": "base64"
+        }
+       ],
+       "type": "choice"
+      },
+      {
+       "key": "expectations",
+       "label": "Expectations",
+       "mandatory": false,
+       "readOnly": false,
+       "mandatoryGroups": null,
+       "mandatoryConditionFields": null,
+       "mandatoryConditionValues": null,
+       "visibleConditionFields": null,
+       "visibleConditionValues": null,
+       "linkedFields": [],
+       "linkedValues": [],
+       "cardinality": "n",
+       "defaultValue": [],
+       "predefinedExpectations": [
+        {
+         "expectation_type": "DETECTION",
+         "expectation_name": "Detection",
+         "expectation_description": null,
+         "expectation_score": 100.0,
+         "expectation_expectation_group": false,
+         "expectation_expiration_time": 21600
+        }
+       ],
+       "type": "expectation"
+      }
+     ],
+     "variables": [
+      {
+       "key": "user",
+       "label": "User that will receive the injection",
+       "type": "String",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "user.id",
+         "label": "Id of the user in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.email",
+         "label": "Email of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.firstname",
+         "label": "First name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lastname",
+         "label": "Last name of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "user.lang",
+         "label": "Language of the user",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "exercise",
+       "label": "Exercise of the current injection",
+       "type": "Object",
+       "cardinality": "1",
+       "children": [
+        {
+         "key": "exercise.id",
+         "label": "Id of the exercise in the platform",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.name",
+         "label": "Name of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        },
+        {
+         "key": "exercise.description",
+         "label": "Description of the exercise",
+         "type": "String",
+         "cardinality": "1",
+         "children": []
+        }
+       ]
+      },
+      {
+       "key": "teams",
+       "label": "List of team names for the injection",
+       "type": "String",
+       "cardinality": "n",
+       "children": []
+      },
+      {
+       "key": "player_uri",
+       "label": "Player interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "challenges_uri",
+       "label": "Challenges interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "scoreboard_uri",
+       "label": "Scoreboard interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      },
+      {
+       "key": "lessons_uri",
+       "label": "Lessons learned interface platform link",
+       "type": "String",
+       "cardinality": "1",
+       "children": []
+      }
+     ],
+     "context": {},
+     "atomicTesting": true,
+     "contract_id": "715f3bd3-852a-5900-aa7e-f8b3ec6e82e2",
+     "contract_attack_patterns_external_ids": [],
+     "is_atomic_testing": true,
+     "needs_executor": true,
+     "platforms": [
+      "Linux"
+     ],
+     "domains": [
+      {
+       "listened": true,
+       "domain_id": "683fb18c-5200-4aec-b618-6ded488d3cde",
+       "domain_name": "Endpoint",
+       "domain_color": "#389CFF",
+       "domain_created_at": "2026-06-02T18:22:45.296458Z",
+       "domain_updated_at": "2026-06-02T18:22:45.296458Z"
+      }
+     ]
+    },
+    "listened": true,
+    "injector_contract_external_id": "2f4aeedd-d1d2-56a4-af1d-3e4dfb48a008",
+    "injector_contract_labels": {
+     "en": "Ingress tool transfer (wld)",
+     "fr": "Ingress tool transfer (wld)"
+    },
+    "injector_contract_manual": false,
+    "injector_contract_content": "{\"config\":{\"type\":\"openaev_implant\",\"label\":{\"fr\":\"OpenAEV Implant\",\"en\":\"OpenAEV Implant\"},\"color_dark\":\"#000000\",\"color_light\":\"#000000\"},\"label\":{\"en\":\"Ingress tool transfer (wld)\",\"fr\":\"Ingress tool transfer (wld)\"},\"manual\":false,\"fields\":[{\"key\":\"assets\",\"label\":\"Source assets\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset\"},{\"key\":\"asset_groups\",\"label\":\"Source asset groups\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":[\"assets\",\"asset_groups\"],\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"type\":\"asset-group\"},{\"key\":\"obfuscator\",\"label\":\"Obfuscators\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"1\",\"defaultValue\":[\"plain-text\"],\"choices\":[{\"label\":\"plain-text\",\"value\":\"plain-text\"},{\"label\":\"base64\",\"value\":\"base64\"}],\"type\":\"choice\"},{\"key\":\"expectations\",\"label\":\"Expectations\",\"mandatory\":false,\"readOnly\":false,\"mandatoryGroups\":null,\"mandatoryConditionFields\":null,\"mandatoryConditionValues\":null,\"visibleConditionFields\":null,\"visibleConditionValues\":null,\"linkedFields\":[],\"linkedValues\":[],\"cardinality\":\"n\",\"defaultValue\":[],\"predefinedExpectations\":[{\"expectation_type\":\"DETECTION\",\"expectation_name\":\"Detection\",\"expectation_description\":null,\"expectation_score\":100.0,\"expectation_expectation_group\":false,\"expectation_expiration_time\":21600}],\"type\":\"expectation\"}],\"variables\":[{\"key\":\"user\",\"label\":\"User that will receive the injection\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[{\"key\":\"user.id\",\"label\":\"Id of the user in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.email\",\"label\":\"Email of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.firstname\",\"label\":\"First name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lastname\",\"label\":\"Last name of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"user.lang\",\"label\":\"Language of the user\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"exercise\",\"label\":\"Exercise of the current injection\",\"type\":\"Object\",\"cardinality\":\"1\",\"children\":[{\"key\":\"exercise.id\",\"label\":\"Id of the exercise in the platform\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.name\",\"label\":\"Name of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"exercise.description\",\"label\":\"Description of the exercise\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}]},{\"key\":\"teams\",\"label\":\"List of team names for the injection\",\"type\":\"String\",\"cardinality\":\"n\",\"children\":[]},{\"key\":\"player_uri\",\"label\":\"Player interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"challenges_uri\",\"label\":\"Challenges interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"scoreboard_uri\",\"label\":\"Scoreboard interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]},{\"key\":\"lessons_uri\",\"label\":\"Lessons learned interface platform link\",\"type\":\"String\",\"cardinality\":\"1\",\"children\":[]}],\"context\":{},\"atomicTesting\":true,\"contract_id\":\"715f3bd3-852a-5900-aa7e-f8b3ec6e82e2\",\"contract_attack_patterns_external_ids\":[],\"is_atomic_testing\":true,\"needs_executor\":true,\"platforms\":[\"Linux\"],\"domains\":[{\"listened\":true,\"domain_id\":\"683fb18c-5200-4aec-b618-6ded488d3cde\",\"domain_name\":\"Endpoint\",\"domain_color\":\"#389CFF\",\"domain_created_at\":\"2026-06-02T18:22:45.296458Z\",\"domain_updated_at\":\"2026-06-02T18:22:45.296458Z\"}]}",
+    "injector_contract_custom": false,
+    "injector_contract_needs_executor": true,
+    "injector_contract_platforms": [
+     "Linux"
+    ],
+    "injector_contract_tags": [],
+    "injector_contract_payload": {
+     "listened": true,
+     "payload_id": "9ab3cbf5-4f81-57d1-9f60-7b368885a8f1",
+     "payload_type": "Command",
+     "payload_name": "wetland — Ingress tool transfer (wld)",
+     "payload_description": "First step of the chain: fetch the tool-under-test. curl downloads the wld binary from the project's GitHub and runs `wld -h` (benign — prints usage) to prove download+execute, then cleanup removes it. Detection: curl writing an executable to disk and a new process spawning from it (proxy/NDR tool transfer; EDR exec-after-download).",
+     "payload_platforms": [
+      "Linux"
+     ],
+     "payload_cleanup_executor": "bash",
+     "payload_cleanup_command": "rm -f \"$HOME/.wetland-lab-wld\"\necho 'WETLAND-LAB ingress: cleaned'\n",
+     "payload_elevation_required": false,
+     "payload_arguments": [],
+     "payload_prerequisites": [],
+     "payload_external_id": "d96fc638-d2cf-558c-8bbc-cde10f2c7412",
+     "payload_source": "MANUAL",
+     "payload_expectations": [
+      "DETECTION"
+     ],
+     "payload_status": "VERIFIED",
+     "payload_execution_arch": "ALL_ARCHITECTURES",
+     "payload_collector_type": null,
+     "payload_detection_remediations": [],
+     "payload_output_parsers": [],
+     "payload_created_at": "2026-10-30T20:02:35.584276Z",
+     "payload_updated_at": "2026-10-30T20:02:35.584290Z",
+     "command_executor": "bash",
+     "command_content": "# WETLAND-LAB  T1105 ingress tool transfer — pull the wld tool-under-test\nurl='https://raw.githubusercontent.com/s4nntysec/wetland/main/dist/release/wld-linux-x86_64'\n# (swap to a Release once published: .../releases/latest/download/wld-linux-x86_64)\ndst=\"$HOME/.wetland-lab-wld\"\nif curl -fsSL -o \"$dst\" \"$url\"; then\n  chmod +x \"$dst\"\n  echo \"WETLAND-LAB ingress: downloaded wld -> $dst (T1105)\"\n  \"$dst\" -h 2>&1 | head -n 2\nelse\n  echo 'WETLAND-LAB ingress: download blocked (proxy/AV) — that is a valid detection'\nfi\necho 'detect: curl writing an executable to disk then executing it; proxy/NDR tool transfer'\n"
+    },
+    "injector_contract_created_at": "2026-10-30T20:02:35.585585Z",
+    "injector_contract_updated_at": "2026-10-30T20:02:35.585588Z",
+    "injector_contract_attack_patterns": [
+     {
+      "attack_pattern_id": "d19e69b1-191c-5343-985f-b5582f07b537",
+      "attack_pattern_name": "Ingress Tool Transfer",
+      "attack_pattern_description": "MITRE ATT&CK technique exercised by the wetland purple-team lab.",
+      "attack_pattern_external_id": "T1105",
+      "attack_pattern_kill_chain_phases": []
+     }
+    ],
+    "injector_contract_domains": [
+     "683fb18c-5200-4aec-b618-6ded488d3cde"
+    ],
+    "injector_contract_vulnerabilities": [],
+    "injector_contract_atomic_testing": true,
+    "injector_contract_import_available": false,
+    "injector_contract_id": "715f3bd3-852a-5900-aa7e-f8b3ec6e82e2",
+    "injector_contract_injector_type": "openaev_implant",
+    "injector_contract_arch": "ALL_ARCHITECTURES",
+    "injector_contract_payload_status": "VERIFIED",
+    "injector_contract_injectors": [
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144",
+     "49229430-b5b5-431f-ba5b-f36f599b0144"
+    ],
+    "injector_contract_injector_names": {
+     "49229430-b5b5-431f-ba5b-f36f599b0144": "OpenAEV Implant"
+    }
+   },
+   "inject_tags": [],
+   "inject_teams": [],
+   "inject_documents": []
+  },
+  {
    "inject_id": "d5c7794f-ae4b-555d-a685-69d690123015",
    "inject_title": "Masquerade — process named as a kernel thread (T1036)",
    "inject_description": "Purple-team sim of `wld -l -M '[kworker/0:0]'` / `wld lab masquerade`: launches a real process whose argv[0] is faked to look like a kernel worker thread, holds it ~30s, then cleans up. Detection: a process whose comm looks like a kthread but /proc/<pid>/exe is a real file.",
@@ -46,7 +391,7 @@
    },
    "inject_all_teams": false,
    "inject_depends_on": [],
-   "inject_depends_duration": 0,
+   "inject_depends_duration": 60,
    "inject_injector_contract": {
     "convertedContent": {
      "config": {
@@ -398,7 +743,7 @@
    },
    "inject_all_teams": false,
    "inject_depends_on": [],
-   "inject_depends_duration": 60,
+   "inject_depends_duration": 120,
    "inject_injector_contract": {
     "convertedContent": {
      "config": {
@@ -743,7 +1088,7 @@
    },
    "inject_all_teams": false,
    "inject_depends_on": [],
-   "inject_depends_duration": 120,
+   "inject_depends_duration": 180,
    "inject_injector_contract": {
     "convertedContent": {
      "config": {
@@ -1088,7 +1433,7 @@
    },
    "inject_all_teams": false,
    "inject_depends_on": [],
-   "inject_depends_duration": 180,
+   "inject_depends_duration": 240,
    "inject_injector_contract": {
     "convertedContent": {
      "config": {
@@ -1440,7 +1785,7 @@
    },
    "inject_all_teams": false,
    "inject_depends_on": [],
-   "inject_depends_duration": 240,
+   "inject_depends_duration": 300,
    "inject_injector_contract": {
     "convertedContent": {
      "config": {
