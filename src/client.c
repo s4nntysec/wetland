@@ -384,6 +384,9 @@ wld_run_session(const struct wld_session_opts *o)
 	int relay_specified = o->relay_specified;
 	long epoch_secs = o->epoch_secs;
 	long tunnel_expiry_secs = 0;
+#ifdef _WIN32
+	(void)relay_specified;   /* only read by the POSIX-only zero-config tunnel path */
+#endif
 
 	if (host == NULL) host = "127.0.0.1";
 	if (port == NULL) port = WLD_RELAY_DEFAULT_PORT;
@@ -580,6 +583,9 @@ wld_client_run(int argc, char **argv)
 
 	if (host == NULL) host = "127.0.0.1";
 	if (port == NULL) port = WLD_RELAY_DEFAULT_PORT;
+#ifdef _WIN32
+	(void)masq_name;   /* -M process masquerade is POSIX-only (no-op on Windows) */
+#endif
 
 #ifndef _WIN32
 	signal(SIGPIPE, SIG_IGN);
