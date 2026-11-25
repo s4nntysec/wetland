@@ -296,7 +296,9 @@ encryption is unchanged.
 By default `wld` opens a free **[pinggy](https://pinggy.io)** TCP tunnel by
 spawning the system **`ssh`** (`ssh -p443 -R0:localhost:<relay> tcp@a.pinggy.io`).
 No account, and it works from datacenter IPs. Its one requirement is an **`ssh`
-client** (present on virtually every Linux/macOS host). Free pinggy tunnels get a
+client** — present on virtually every Linux/macOS host, and on Windows 10/11 via
+the built-in **OpenSSH** client (`ssh.exe`; add it under *Settings → System →
+Optional features* if missing). Free pinggy tunnels get a
 random address and expire after ~60 min — just re-run `wld -l` to refresh.
 
 ### Alternative backend: bore (no `ssh` dependency)
@@ -574,16 +576,19 @@ the rest (see [Platform support](#platform-support)).
 
 ## Platform support
 
-| Platform | Relay | Client pipe / file transfer | Client exec (`-e`) / PTY shell (`-i`) |
-|----------|:-----:|:---------------------------:|:-------------------------------------:|
-| Linux    | ✅ | ✅ | ✅ |
-| macOS    | ✅ | ✅ | ✅ |
-| Windows  | ✅ | ✅ | ⛔ (use WSL for now) |
+| Platform | Relay | Client pipe / file transfer | Zero-config tunnel (`-l`) | Client exec (`-e`) / PTY shell (`-i`) |
+|----------|:-----:|:---------------------------:|:-------------------------:|:-------------------------------------:|
+| Linux    | ✅ | ✅ | ✅ | ✅ |
+| macOS    | ✅ | ✅ | ✅ | ✅ |
+| Windows  | ✅ | ✅ | ✅ (needs OpenSSH `ssh.exe`) | ⛔ (use WSL for now) |
 
-On Windows the client uses a thread-based I/O loop, because the console cannot
-be watched with `WSAPoll`. Pipe mode and file transfer therefore work, but the
-interactive PTY shell and `-e` command execution on the listening side are
-POSIX-only for now.
+The **zero-config tunnel** (`-l` auto-starts the embedded relay + a public pinggy
+tunnel when no relay is reachable) now works on Windows too: the embedded relay
+runs on a Win32 thread and the tunnel is opened by spawning the built-in OpenSSH
+`ssh.exe` (killed with the process via a Job Object). The `wld lab` evasion
+module and the interactive PTY shell / `-e` execution on the listening side remain
+POSIX-only for now — on Windows the client uses a thread-based I/O loop because the
+console cannot be watched with `WSAPoll`.
 
 ---
 

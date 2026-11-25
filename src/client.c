@@ -384,9 +384,6 @@ wld_run_session(const struct wld_session_opts *o)
 	int relay_specified = o->relay_specified;
 	long epoch_secs = o->epoch_secs;
 	long tunnel_expiry_secs = 0;
-#ifdef _WIN32
-	(void)relay_specified;   /* only read by the POSIX-only zero-config tunnel path */
-#endif
 
 	if (host == NULL) host = "127.0.0.1";
 	if (port == NULL) port = WLD_RELAY_DEFAULT_PORT;
@@ -414,9 +411,9 @@ wld_run_session(const struct wld_session_opts *o)
 		VLOG("wld: public relay %d/%d -> %s:%s\n", idx + 1, npool, host, port);
 	}
 
-#ifndef _WIN32
 	/* Zero-config listener: no relay + nothing on the default port -> embedded
-	 * relay + public tunnel (pinggy default; WLD_BORE_HOST / WLD_FRP_SERVER). */
+	 * relay + public tunnel (pinggy default; WLD_BORE_HOST / WLD_FRP_SERVER).
+	 * Works on POSIX and Windows (Windows pinggy spawns OpenSSH's ssh.exe). */
 	if (listen_mode && !use_pool && !relay_specified) {
 		int probe = wld_tcp_connect(host, port);
 		if (probe >= 0) {
@@ -447,7 +444,6 @@ wld_run_session(const struct wld_session_opts *o)
 			}
 		}
 	}
-#endif
 
 	uint64_t epoch0 = 0;
 	if (epoch_secs > 0)
