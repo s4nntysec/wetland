@@ -317,9 +317,11 @@ wld: tunnel up at 203.0.113.7:51820 — the other side runs:
 It starts the embedded relay on all interfaces, maps that port on the router,
 advertises your **public IP:port**, and **removes the mapping on exit**. If the
 router has UPnP/NAT-PMP disabled, or you are behind **CGNAT** (the mapped address
-comes back private — carrier NAT, common on mobile/4G), it says so and falls back
-to the **pinggy tunnel** automatically. This path is Windows-only; on Linux/macOS
-`wld -l` uses the pinggy tunnel.
+comes back private — carrier NAT, common on mobile/4G, and typical inside VMs with
+no UPnP gateway), it falls back automatically to the **native bore tunnel**
+(`bore.pub`, no `ssh` dependency) and then to the **pinggy tunnel** (ssh). So the
+Windows order is: **router port map → bore → pinggy**. This port-mapping step is
+Windows-only; on Linux/macOS `wld -l` uses the pinggy tunnel.
 
 ### Alternative backend: bore (no `ssh` dependency)
 

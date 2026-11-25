@@ -66,6 +66,16 @@ wld_open_tunnel(const char *secret, int verbose,
 		fprintf(stderr, "wld: router port-mapping unavailable - trying a public "
 		    "tunnel instead...\n");
 	}
+	/* Native bore (no ssh dependency) to bore.pub by default — reliable on
+	 * Windows where the ssh-based pinggy path is finicky. Explicit
+	 * WLD_BORE_HOST was already handled above. */
+	{
+		fprintf(stderr, "wld: no relay configured - embedded relay + bore tunnel "
+		    "(bore.pub)...\n");
+		int rb = wld_bore_autotunnel("bore.pub", 0, verbose, lp, lpc, ph, phc, pp);
+		if (rb == 0) return 0;
+		fprintf(stderr, "wld: bore tunnel failed - trying pinggy (ssh)...\n");
+	}
 #endif
 	fprintf(stderr, "wld: no relay configured - embedded relay + pinggy tunnel...\n");
 	int r = wld_pinggy_autotunnel(verbose, lp, lpc, ph, phc, pp);

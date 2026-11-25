@@ -14,41 +14,56 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef _WIN32
-
-int
-wld_bore_autotunnel(const char *bore_host, int requested_port, int verbose,
-                    char *local_port_out, size_t lpcap,
-                    char *pub_host_out, size_t phcap, int *pub_port_out)
-{
-	(void)bore_host; (void)requested_port; (void)verbose;
-	(void)local_port_out; (void)lpcap; (void)pub_host_out; (void)phcap;
-	(void)pub_port_out;
-	return -1; /* auto-tunnel is POSIX-only */
-}
-
-void wld_bore_drain(int max_ms) { (void)max_ms; }
-
-#else /* ---------------------------------------------------------------- POSIX */
-
-#include <pthread.h>
 #include <stdarg.h>
-#include <time.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <netdb.h>
-#include <errno.h>
+
+/* Thread / mutex / sleep shim so the one implementation builds on POSIX and
+ * Windows. All socket I/O already goes through the wld_* compat helpers. */
+#ifdef _WIN32
+#  include <windows.h>
+   typedef HANDLE wld_thr;
+   typedef CRITICAL_SECTION wld_mtx;
+#  define THR_FN     DWORD WINAPI
+#  define THR_RETURN return 0
+   typedef DWORD (WINAPI *thr_start)(LPVOID);
+   static int  thr_spawn(wld_thr *t, thr_start fn, void *a) { *t = CreateThread(NULL, 0, fn, a, 0, NULL); return *t ? 0 : -1; }
+   static void thr_detach(wld_thr t) { if (t) CloseHandle(t); }
+   static void thr_join(wld_thr t)   { if (t) { WaitForSingleObject(t, INFINITE); CloseHandle(t); } }
+   static void mtx_init(wld_mtx *m)   { InitializeCriticalSection(m); }
+   static void mtx_lock(wld_mtx *m)   { EnterCriticalSection(m); }
+   static void mtx_unlock(wld_mtx *m) { LeaveCriticalSection(m); }
+   static void msleep(int ms)         { Sleep(ms); }
+#else
+#  include <pthread.h>
+#  include <time.h>
+#  include <sys/socket.h>
+#  include <sys/time.h>
+#  include <netdb.h>
+#  include <errno.h>
+   typedef pthread_t wld_thr;
+   typedef pthread_mutex_t wld_mtx;
+#  define THR_FN     void *
+#  define THR_RETURN return NULL
+   typedef void *(*thr_start)(void *);
+   static int  thr_spawn(wld_thr *t, thr_start fn, void *a) { return pthread_create(t, NULL, fn, a); }
+   static void thr_detach(wld_thr t) { pthread_detach(t); }
+   static void thr_join(wld_thr t)   { pthread_join(t, NULL); }
+   static void mtx_init(wld_mtx *m)   { pthread_mutex_init(m, NULL); }
+   static void mtx_lock(wld_mtx *m)   { pthread_mutex_lock(m); }
+   static void mtx_unlock(wld_mtx *m) { pthread_mutex_unlock(m); }
+   static void msleep(int ms)         { struct timespec ts = { ms / 1000, (long)(ms % 1000) * 1000000L }; nanosleep(&ts, NULL); }
+#endif
 
 #define FRAME_MAX 256
 
 static int g_verbose;
 static int g_tunnel_up;                 /* set once a tunnel is established   */
-static pthread_mutex_t g_amx = PTHREAD_MUTEX_INITIALIZER;
+static wld_mtx g_amx;                    /* initialised once in the orchestrator */
+static int g_amx_ready;
 static int g_active;                     /* live proxy connections            */
 
-static void active_inc(void) { pthread_mutex_lock(&g_amx); g_active++; pthread_mutex_unlock(&g_amx); }
-static void active_dec(void) { pthread_mutex_lock(&g_amx); g_active--; pthread_mutex_unlock(&g_amx); }
-static int  active_get(void) { pthread_mutex_lock(&g_amx); int v = g_active; pthread_mutex_unlock(&g_amx); return v; }
+static void active_inc(void) { mtx_lock(&g_amx); g_active++; mtx_unlock(&g_amx); }
+static void active_dec(void) { mtx_lock(&g_amx); g_active--; mtx_unlock(&g_amx); }
+static int  active_get(void) { if (!g_amx_ready) return g_active; mtx_lock(&g_amx); int v = g_active; mtx_unlock(&g_amx); return v; }
 
 /* TCP connect with a timeout (ms), so an unreachable tunnel server fails fast
  * and with a clear reason instead of blocking far past the startup window. */
@@ -67,11 +82,17 @@ connect_to(const char *host, const char *port, int ms)
 		wld_set_nonblock(fd, 1);
 		int r = connect((SOCKET_CAST)fd, rp->ai_addr, (int)rp->ai_addrlen);
 		if (r == 0) { wld_set_nonblock(fd, 0); break; }
-		if (errno == EINPROGRESS) {
-			wld_pollfd p; p.fd = fd; p.events = POLLOUT;
+		int inprog;
+#ifdef _WIN32
+		inprog = wld_wouldblock();       /* WSAEWOULDBLOCK on Windows */
+#else
+		inprog = (errno == EINPROGRESS);
+#endif
+		if (inprog) {
+			wld_pollfd p; p.fd = (SOCKET_CAST)fd; p.events = POLLOUT;
 			if (wld_poll(&p, 1, ms) == 1) {
 				int err = 0; socklen_t el = sizeof err;
-				getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &el);
+				getsockopt((SOCKET_CAST)fd, SOL_SOCKET, SO_ERROR, (char *)&err, &el);
 				if (err == 0) { wld_set_nonblock(fd, 0); break; }
 			}
 		}
@@ -191,7 +212,7 @@ typedef struct {
  * poll loop hits when a blocking write stalls (bore uses copy_bidirectional). */
 typedef struct { int src, dst; unsigned long count; } half_t;
 
-static void *
+static THR_FN
 half_pump(void *arg)
 {
 	half_t *h = arg;
@@ -207,8 +228,8 @@ half_pump(void *arg)
 			break;
 		}
 	}
-	shutdown(h->dst, SHUT_WR); /* propagate half-close */
-	return NULL;
+	shutdown((SOCKET_CAST)h->dst, SHUT_WR); /* propagate half-close */
+	THR_RETURN;
 }
 
 /* Bidirectional splice between two blocking sockets, one thread per direction. */
@@ -216,37 +237,37 @@ static void
 splice2(int a, int b)
 {
 	half_t h1 = { a, b, 0 }, h2 = { b, a, 0 };
-	pthread_t t1, t2;
-	int c1 = pthread_create(&t1, NULL, half_pump, &h1);
-	int c2 = pthread_create(&t2, NULL, half_pump, &h2);
-	if (c1 == 0) pthread_join(t1, NULL);
-	if (c2 == 0) pthread_join(t2, NULL);
+	wld_thr t1, t2;
+	int c1 = thr_spawn(&t1, half_pump, &h1);
+	int c2 = thr_spawn(&t2, half_pump, &h2);
+	if (c1 == 0) thr_join(t1);
+	if (c2 == 0) thr_join(t2);
 	blog("proxy: closed (a->b %lu bytes, b->a %lu bytes)", h1.count, h2.count);
 	wld_closesocket(a);
 	wld_closesocket(b);
 }
 
-static void *
+static THR_FN
 proxy_thread(void *arg)
 {
 	proxy_arg *pa = arg;
 
 	int rc = connect_to(pa->bore_host, pa->bore_port, 8000);
-	if (rc < 0) { blog("proxy: cannot reconnect to bore"); free(pa); return NULL; }
+	if (rc < 0) { blog("proxy: cannot reconnect to bore"); free(pa); THR_RETURN; }
 
 	char msg[FRAME_MAX];
 	snprintf(msg, sizeof msg, "{\"Accept\":\"%s\"}", pa->uuid);
-	if (send_frame(rc, msg) != 0) { wld_closesocket(rc); free(pa); return NULL; }
+	if (send_frame(rc, msg) != 0) { wld_closesocket(rc); free(pa); THR_RETURN; }
 
 	int lc = wld_tcp_connect(pa->local_host, pa->local_port);
-	if (lc < 0) { blog("proxy: cannot reach local relay"); wld_closesocket(rc); free(pa); return NULL; }
+	if (lc < 0) { blog("proxy: cannot reach local relay"); wld_closesocket(rc); free(pa); THR_RETURN; }
 
 	blog("proxy: accepted %s -> %s:%s", pa->uuid, pa->local_host, pa->local_port);
 	active_inc();
 	splice2(rc, lc);
 	active_dec();
 	free(pa);
-	return NULL;
+	THR_RETURN;
 }
 
 /* ---- control connection thread ------------------------------------------ */
@@ -265,24 +286,29 @@ typedef struct {
 static void
 set_recv_timeout(int fd, int secs)
 {
+#ifdef _WIN32
+	DWORD ms = (DWORD)secs * 1000;  /* Winsock SO_RCVTIMEO is milliseconds (DWORD) */
+	setsockopt((SOCKET_CAST)fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&ms, sizeof ms);
+#else
 	struct timeval tv = { .tv_sec = secs, .tv_usec = 0 };
 	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+#endif
 }
 
-static void *
+static THR_FN
 control_thread(void *arg)
 {
 	bore_ctx *ctx = arg;
 
 	blog("connecting to %s:%s ...", ctx->bore_host, ctx->bore_port);
 	int fd = connect_to(ctx->bore_host, ctx->bore_port, 8000);
-	if (fd == -2) { blog("DNS lookup for %s failed", ctx->bore_host); ctx->ready = -1; return NULL; }
-	if (fd < 0)   { blog("cannot connect to %s:%s (timeout/refused)", ctx->bore_host, ctx->bore_port); ctx->ready = -1; return NULL; }
+	if (fd == -2) { blog("DNS lookup for %s failed", ctx->bore_host); ctx->ready = -1; THR_RETURN; }
+	if (fd < 0)   { blog("cannot connect to %s:%s (timeout/refused)", ctx->bore_host, ctx->bore_port); ctx->ready = -1; THR_RETURN; }
 	blog("connected to %s:%s", ctx->bore_host, ctx->bore_port);
 
 	char hello[FRAME_MAX];
 	snprintf(hello, sizeof hello, "{\"Hello\":%d}", ctx->requested_port);
-	if (send_frame(fd, hello) != 0) { wld_closesocket(fd); ctx->ready = -1; return NULL; }
+	if (send_frame(fd, hello) != 0) { wld_closesocket(fd); ctx->ready = -1; THR_RETURN; }
 
 	freader fr = { .fd = fd, .len = 0 };
 	char frame[FRAME_MAX + 1];
@@ -290,18 +316,18 @@ control_thread(void *arg)
 	/* handshake reply (3s timeout, like bore's NETWORK_TIMEOUT) */
 	set_recv_timeout(fd, 3);
 	int fl = fr_next(&fr, frame, sizeof frame);
-	if (fl <= 0) { blog("no handshake reply from bore"); wld_closesocket(fd); ctx->ready = -1; return NULL; }
+	if (fl <= 0) { blog("no handshake reply from bore"); wld_closesocket(fd); ctx->ready = -1; THR_RETURN; }
 
 	long port;
 	if (strstr(frame, "\"Challenge\"")) {
-		blog("bore server requires authentication (unsupported)"); wld_closesocket(fd); ctx->ready = -1; return NULL;
+		blog("bore server requires authentication (unsupported)"); wld_closesocket(fd); ctx->ready = -1; THR_RETURN;
 	}
 	if (strstr(frame, "\"Error\"")) {
 		char em[128] = ""; json_str(frame, "Error", em, sizeof em);
-		blog("bore error: %s", em); wld_closesocket(fd); ctx->ready = -1; return NULL;
+		blog("bore error: %s", em); wld_closesocket(fd); ctx->ready = -1; THR_RETURN;
 	}
 	if (strstr(frame, "\"Hello\"") == NULL || json_int(frame, "Hello", &port) != 0) {
-		blog("unexpected handshake: %s", frame); wld_closesocket(fd); ctx->ready = -1; return NULL;
+		blog("unexpected handshake: %s", frame); wld_closesocket(fd); ctx->ready = -1; THR_RETURN;
 	}
 	ctx->assigned_port = (int)port;
 	ctx->ready = 1;
@@ -327,9 +353,9 @@ control_thread(void *arg)
 			snprintf(pa->local_host, sizeof pa->local_host, "%s", ctx->local_host);
 			snprintf(pa->local_port, sizeof pa->local_port, "%s", ctx->local_port);
 			snprintf(pa->uuid, sizeof pa->uuid, "%s", uuid);
-			pthread_t t;
-			if (pthread_create(&t, NULL, proxy_thread, pa) == 0)
-				pthread_detach(t);
+			wld_thr t;
+			if (thr_spawn(&t, proxy_thread, pa) == 0)
+				thr_detach(t);
 			else
 				free(pa);
 			continue;
@@ -344,7 +370,7 @@ control_thread(void *arg)
 
 	wld_closesocket(fd);
 	ctx->ready = -1; /* signal the tunnel is no longer up */
-	return NULL;
+	THR_RETURN;
 }
 
 /* ---- embedded relay thread ---------------------------------------------- */
@@ -357,13 +383,13 @@ typedef struct {
 
 /* relay_serve fills its assigned_port early (right after bind), so the
  * orchestrator can read rc->port before the serve loop returns. */
-static void *
+static THR_FN
 relay_thread_live(void *arg)
 {
 	relay_ctx *rc = arg;
 	wld_relay_serve("127.0.0.1", "0", rc->verbose, 0, rc->stop,
 	                (int *)&rc->port);
-	return NULL;
+	THR_RETURN;
 }
 
 /* ---- orchestrator ------------------------------------------------------- */
@@ -375,6 +401,7 @@ wld_bore_autotunnel(const char *bore_host, int requested_port, int verbose,
 {
 	g_verbose = verbose;
 	if (bore_host == NULL) bore_host = WLD_BORE_DEFAULT_HOST;
+	if (!g_amx_ready) { mtx_init(&g_amx); g_amx_ready = 1; }
 
 	/* process-lifetime state (intentionally leaked) */
 	static volatile sig_atomic_t stop; /* stays 0 */
@@ -384,17 +411,16 @@ wld_bore_autotunnel(const char *bore_host, int requested_port, int verbose,
 	rctx->stop = &stop;
 	rctx->verbose = verbose;
 
-	pthread_t rt;
-	if (pthread_create(&rt, NULL, relay_thread_live, rctx) != 0) { blog("relay thread failed"); return -1; }
-	pthread_detach(rt);
+	wld_thr rt;
+	if (thr_spawn(&rt, relay_thread_live, rctx) != 0) { blog("relay thread failed"); return -1; }
+	thr_detach(rt);
 
 	/* wait for the embedded relay to bind (up to ~2s) */
 	int relay_port = 0;
 	for (int i = 0; i < 200; i++) {
 		relay_port = rctx->port;
 		if (relay_port > 0) break;
-		struct timespec ts = { 0, 10 * 1000 * 1000 }; /* 10ms */
-		nanosleep(&ts, NULL);
+		msleep(10);
 	}
 	if (relay_port <= 0) { blog("embedded relay did not start"); return -1; }
 	blog("embedded relay on 127.0.0.1:%d", relay_port);
@@ -411,15 +437,14 @@ wld_bore_autotunnel(const char *bore_host, int requested_port, int verbose,
 	bctx->stop = &stop;
 	bctx->ready = 0;
 
-	pthread_t ct;
-	if (pthread_create(&ct, NULL, control_thread, bctx) != 0) { blog("bore thread failed"); return -1; }
-	pthread_detach(ct);
+	wld_thr ct;
+	if (thr_spawn(&ct, control_thread, bctx) != 0) { blog("bore thread failed"); return -1; }
+	thr_detach(ct);
 
 	/* wait for the tunnel handshake (up to ~13s: 8s connect + handshake) */
 	for (int i = 0; i < 1300; i++) {
 		if (bctx->ready != 0) break;
-		struct timespec ts = { 0, 10 * 1000 * 1000 };
-		nanosleep(&ts, NULL);
+		msleep(10);
 	}
 	if (bctx->ready != 1) return -1;
 
@@ -443,10 +468,7 @@ wld_bore_drain(int max_ms)
 	const int step = 20;
 	while (waited < max_ms) {
 		if (active_get() == 0 && waited >= 300) break;
-		struct timespec ts = { 0, step * 1000 * 1000 };
-		nanosleep(&ts, NULL);
+		msleep(step);
 		waited += step;
 	}
 }
-
-#endif /* POSIX */
