@@ -1,5 +1,5 @@
 /*
- * wetland — purple-team lab module (see wld_lab.h).
+ * wetland - purple-team lab module (see wld_lab.h).
  *
  * Subcommands:  wld lab <masquerade|persist|hide|beacon|uninstall|detections>
  *
@@ -193,7 +193,7 @@ hint_beacon(void)
 "\n  ── detection hint ───────────────────────────────────────────\n"
 "  ATT&CK : T1071.001 (Web C2) / T1573 (Encrypted Channel) /\n"
 "           T1571 (Non-Standard Port) / T1008 (Fallback Channels)\n"
-"  Model  : centralized C2 — the implant checks in to a C2 server on a\n"
+"  Model  : centralized C2 - the implant checks in to a C2 server on a\n"
 "           fixed cadence (+/- jitter). --as shapes the check-in:\n"
 "             raw  = opaque bytes (encrypted-channel look)\n"
 "             http = GET request with a browser UA (web C2)\n"
@@ -633,7 +633,7 @@ static int
 lab_usage(void)
 {
 	fputs(
-"wld lab — purple-team lab: documented, reversible evasion simulations\n"
+"wld lab - purple-team lab: documented, reversible evasion simulations\n"
 "\n"
 "  !! AUTHORIZED LAB USE ONLY. Every technique is loud, tagged " LAB_MARKER ",\n"
 "     and removable with `wld lab uninstall`. Not a stealth implant.\n"
@@ -712,7 +712,7 @@ wld_lab_main(int argc, char **argv)
 	 * long `--` flags are the technique's. Supported for masquerade (-> a
 	 * masqueraded listener) and beacon (listener + background beacon). persist
 	 * and hide are NOT fused with a listener (that would be a persistent/hidden
-	 * backdoor) — run them separately.
+	 * backdoor) - run them separately.
 	 */
 	int serve = 0;
 	for (int i = 0; i < sub_argc; i++)
@@ -770,7 +770,7 @@ wld_lab_main(int argc, char **argv)
 		}
 		if (strcmp(tech, "persist") == 0) {
 			/*
-			 * Persist a wld LISTENER — a reboot-surviving reverse-shell
+			 * Persist a wld LISTENER - a reboot-surviving reverse-shell
 			 * simulation (T1053.003/T1543.002 applied to the C2 channel). If no
 			 * explicit --exec was given, synthesize one from the serve flags so
 			 * the persisted command *is* the listener. Still tagged WETLAND-LAB,
@@ -807,7 +807,7 @@ wld_lab_main(int argc, char **argv)
 		if (strcmp(tech, "hide") == 0) {
 			/*
 			 * Drop the hidden + timestomped copy, then serve the listener FROM
-			 * that copy (so ps / /proc/pid/exe point at the dot-file) — a
+			 * that copy (so ps / /proc/pid/exe point at the dot-file) - a
 			 * hidden-listener simulation (T1564.001). Still a known dot-file
 			 * artifact; `wld lab uninstall` removes it.
 			 */
@@ -842,7 +842,7 @@ wld_lab_main(int argc, char **argv)
 		int pubport = 0; long exp = 0;
 		if (wld_open_tunnel("wld-lab", 1, lport, sizeof lport,
 		    pubhost, sizeof pubhost, &pubport, &exp) == 0)
-			labf("tunnel up — public %s:%d (reaches the embedded relay)",
+			labf("tunnel up - public %s:%d (reaches the embedded relay)",
 			    pubhost, pubport);
 		else
 			labf("tunnel failed; continuing local-only");
@@ -860,7 +860,7 @@ wld_lab_main(int argc, char **argv)
 	else if (strcmp(tech, "uninstall") == 0)
 		rc = do_uninstall();
 	else if (strcmp(tech, "detections") == 0) {
-		fprintf(stderr, "wld lab — ATT&CK detection mapping\n");
+		fprintf(stderr, "wld lab - ATT&CK detection mapping\n");
 		hint_masquerade(); hint_persist(); hint_hide(); hint_beacon();
 		rc = 0;
 	}

@@ -264,7 +264,7 @@ wld_pump(int tun_fd, int local_rd, int local_wr, wld_session *sess)
 		}
 
 		if (n == 0) {
-			/* Nothing to wait on — we are done. */
+			/* Nothing to wait on - we are done. */
 			rc = 0;
 			goto out;
 		}
@@ -429,7 +429,7 @@ wld_pump(int tun_fd, int local_rd, int local_wr, wld_session *sess)
 	/* The rx thread (tunnel -> local) defines the session lifetime: it returns
 	 * when the peer closes, after delivering everything. Wait for it fully, then
 	 * give tx a short grace (a tx thread blocked on console input with no EOF is
-	 * abandoned at process exit — a known interactive limitation on Windows). */
+	 * abandoned at process exit - a known interactive limitation on Windows). */
 	WaitForSingleObject(th[1], INFINITE);
 	WaitForSingleObject(th[0], 2000);
 	CloseHandle(th[0]);

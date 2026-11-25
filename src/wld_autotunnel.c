@@ -1,5 +1,5 @@
 /*
- * wetland — zero-config tunnel selector (see wld_autotunnel.h).
+ * wetland - zero-config tunnel selector (see wld_autotunnel.h).
  */
 #include "wld_autotunnel.h"
 #include "wld_bore.h"
@@ -40,7 +40,7 @@ wld_open_tunnel(const char *secret, int verbose,
 		const char *frp_token = getenv("WLD_FRP_TOKEN");
 		const char *frp_rport = getenv("WLD_FRP_REMOTE_PORT");
 		int req = (frp_rport && frp_rport[0]) ? atoi(frp_rport) : derived_port(secret);
-		fprintf(stderr, "wld: no relay configured — embedded relay + frp tunnel "
+		fprintf(stderr, "wld: no relay configured - embedded relay + frp tunnel "
 		    "via %s...\n", frp_server);
 		return wld_frp_autotunnel(frp_server, frp_port, frp_token, req, verbose,
 		    lp, lpc, ph, phc, pp);
@@ -48,26 +48,26 @@ wld_open_tunnel(const char *secret, int verbose,
 	if (bore_host != NULL && bore_host[0] != '\0') {
 		const char *bore_rport = getenv("WLD_BORE_REMOTE_PORT");
 		int req = (bore_rport && bore_rport[0]) ? atoi(bore_rport) : 0;
-		fprintf(stderr, "wld: no relay configured — embedded relay + %s "
+		fprintf(stderr, "wld: no relay configured - embedded relay + %s "
 		    "tunnel...\n", bore_host);
 		return wld_bore_autotunnel(bore_host, req, verbose, lp, lpc, ph, phc, pp);
 	}
 #ifdef _WIN32
-	/* Windows default: open a port on the local router directly — no relay, no
+	/* Windows default: open a port on the local router directly - no relay, no
 	 * separate server, no third-party service (NAT-PMP, then UPnP-IGD). Falls
 	 * through to the pinggy tunnel if the router won't map (CGNAT/disabled). */
 	{
 		int rm = wld_natmap_open(verbose, lp, lpc, ph, phc, pp);
 		if (rm == 0) {
-			fprintf(stderr, "wld: no relay configured — opened a port on the "
+			fprintf(stderr, "wld: no relay configured - opened a port on the "
 			    "router (NAT-PMP/UPnP); no tunnel needed\n");
 			return 0;
 		}
-		fprintf(stderr, "wld: router port-mapping unavailable — trying a public "
+		fprintf(stderr, "wld: router port-mapping unavailable - trying a public "
 		    "tunnel instead...\n");
 	}
 #endif
-	fprintf(stderr, "wld: no relay configured — embedded relay + pinggy tunnel...\n");
+	fprintf(stderr, "wld: no relay configured - embedded relay + pinggy tunnel...\n");
 	int r = wld_pinggy_autotunnel(verbose, lp, lpc, ph, phc, pp);
 	if (r == 0 && expiry_secs) *expiry_secs = 55 * 60; /* pinggy free ~60 min */
 	return r;

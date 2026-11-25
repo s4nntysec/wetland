@@ -1,5 +1,5 @@
 /*
- * wetland — native frp reverse-tunnel client (see wld_frp.h).
+ * wetland - native frp reverse-tunnel client (see wld_frp.h).
  */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE

@@ -1,5 +1,5 @@
 /*
- * wetland — relay core (see wld_relay.h).
+ * wetland - relay core (see wld_relay.h).
  *
  * Pairs a CONNECT with a waiting LISTEN that share the same 16-byte address,
  * then splices their TCP streams. It only ever sees the rendezvous address and

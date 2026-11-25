@@ -1,5 +1,5 @@
 /*
- * wetland — Windows NAT port-mapping backend (NAT-PMP + UPnP-IGD).
+ * wetland - Windows NAT port-mapping backend (NAT-PMP + UPnP-IGD).
  *
  * Opens a NAT'd listener to the internet with NO relay, NO separate server and
  * NO third-party service, by asking the local router to forward a port:
@@ -16,7 +16,7 @@
 #include <stddef.h>
 
 /*
- * Returns 0 on success (port mapped; outputs filled), -1 otherwise — on failure
+ * Returns 0 on success (port mapped; outputs filled), -1 otherwise - on failure
  * the embedded relay it may have started is stopped again, so the caller can
  * fall through to a tunnel backend. local_port_out = the embedded relay's local
  * port (dial 127.0.0.1:local); pub_host_out/pub_port_out = the public endpoint.

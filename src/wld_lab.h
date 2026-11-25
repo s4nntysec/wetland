@@ -1,5 +1,5 @@
 /*
- * wetland — purple-team lab module.
+ * wetland - purple-team lab module.
  *
  * Documented, reversible simulations of common evasion / persistence TTPs,
  * for exercising detections in an AUTHORIZED lab (Atomic-Red-Team style):

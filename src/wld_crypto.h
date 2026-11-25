@@ -1,5 +1,5 @@
 /*
- * wetland — crypto core
+ * wetland - crypto core
  *
  * Secret derivation and the end-to-end handshake/transport.
  *

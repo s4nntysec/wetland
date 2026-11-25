@@ -1,5 +1,5 @@
 /*
- * wetland — embeddable relay core.
+ * wetland - embeddable relay core.
  *
  * The rendezvous server loop, factored out of the `wetland-relay` binary so the
  * client can also run a relay in-process (see the frp auto-tunnel in

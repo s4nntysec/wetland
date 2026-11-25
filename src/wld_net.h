@@ -1,4 +1,4 @@
-/* wetland — small socket/IO helpers */
+/* wetland - small socket/IO helpers */
 #ifndef WLD_NET_H
 #define WLD_NET_H 1
 

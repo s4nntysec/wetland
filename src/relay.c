@@ -1,5 +1,5 @@
 /*
- * wetland-relay — the rendezvous server (thin CLI wrapper).
+ * wetland-relay - the rendezvous server (thin CLI wrapper).
  *
  * The actual serve loop lives in wld_relay.c (wld_relay_serve), so the client
  * can embed a relay in-process for the frp auto-tunnel.
@@ -36,7 +36,7 @@ main(int argc, char **argv)
 		case 'h':
 		default:
 			fprintf(stderr,
-			    "wetland-relay — rendezvous server\n"
+			    "wetland-relay - rendezvous server\n"
 			    "usage: %s [-b bind-addr] [-p port] [-v]\n"
 			    "  -b ADDR   bind address (default: all interfaces)\n"
 			    "  -p PORT   listen port (default: %s)\n"

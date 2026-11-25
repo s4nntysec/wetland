@@ -1,5 +1,5 @@
 /*
- * wetland — bore-style reverse tunnel client (see wld_bore.h).
+ * wetland - bore-style reverse tunnel client (see wld_bore.h).
  */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE

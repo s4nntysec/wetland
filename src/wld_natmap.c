@@ -1,5 +1,5 @@
 /*
- * wetland — Windows NAT port-mapping backend (see wld_natmap.h).
+ * wetland - Windows NAT port-mapping backend (see wld_natmap.h).
  */
 #ifdef _WIN32
 #  ifndef _WIN32_WINNT
@@ -259,7 +259,7 @@ natpmp_map(const char *gw, int internal_port, char *ext_ip, size_t extc, int *ex
 	if (n < 12 || resp[1] != 128 || rd16(resp + 2) != 0) return -1;
 	snprintf(ext_ip, extc, "%u.%u.%u.%u", resp[8], resp[9], resp[10], resp[11]);
 	if (is_private_v4(ext_ip)) {
-		plog("NAT-PMP: external IP %s is private (CGNAT/double-NAT) — not reachable", ext_ip);
+		plog("NAT-PMP: external IP %s is private (CGNAT/double-NAT) - not reachable", ext_ip);
 		return -1;
 	}
 
@@ -297,6 +297,20 @@ ssdp_discover(char *loc, size_t loccap)
 	if (s == INVALID_SOCKET) return -1;
 	DWORD to = 1500;
 	setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (char *)&to, sizeof to);
+
+	/* Pin the M-SEARCH to the LAN NIC. Without this Windows may send the
+	 * multicast out a different interface (VPN/virtual/Hyper-V) and the IGD
+	 * never sees it — the usual cause of "no IGD responded". */
+	struct in_addr lan_addr;
+	if (inet_pton(AF_INET, g_lan, &lan_addr) == 1) {
+		struct sockaddr_in local; memset(&local, 0, sizeof local);
+		local.sin_family = AF_INET; local.sin_addr = lan_addr;
+		bind(s, (struct sockaddr *)&local, sizeof local);
+		setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF, (char *)&lan_addr, sizeof lan_addr);
+	}
+	unsigned char mttl = 2;
+	setsockopt(s, IPPROTO_IP, IP_MULTICAST_TTL, (char *)&mttl, sizeof mttl);
+
 	struct sockaddr_in dst; memset(&dst, 0, sizeof dst);
 	dst.sin_family = AF_INET; dst.sin_port = htons(1900);
 	inet_pton(AF_INET, "239.255.255.250", &dst.sin_addr);
@@ -452,7 +466,7 @@ upnp_map(int internal_port, const char *lan, char *ext_ip, size_t extc, int *ext
 	}
 	if (xml_val(resp, "NewExternalIPAddress", ext_ip, extc) != 0) return -1;
 	if (is_private_v4(ext_ip)) {
-		plog("UPnP: external IP %s is private (CGNAT/double-NAT) — not reachable", ext_ip);
+		plog("UPnP: external IP %s is private (CGNAT/double-NAT) - not reachable", ext_ip);
 		return -1;
 	}
 
@@ -500,7 +514,7 @@ wld_natmap_open(int verbose, char *local_port_out, size_t lpc,
 	g_method = 0;
 
 	if (find_gateway(g_gw, sizeof g_gw, g_lan, sizeof g_lan) != 0) {
-		plog("no IPv4 default gateway — cannot map a port");
+		plog("no IPv4 default gateway - cannot map a port");
 		return -1;
 	}
 	plog("gateway %s, LAN %s", g_gw, g_lan);

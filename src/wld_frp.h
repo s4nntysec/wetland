@@ -1,10 +1,10 @@
 /*
- * wetland — native frp (fatedier/frp) reverse-tunnel client.
+ * wetland - native frp (fatedier/frp) reverse-tunnel client.
  *
  * Exposes a locally-running relay through a self-hosted frp server (frps), so a
  * listener behind NAT is reachable with no inbound port of its own.
  *
- * frp has NO public server — you run frps yourself on a public host. This client
+ * frp has NO public server - you run frps yourself on a public host. This client
  * speaks frp's control protocol natively (no external frpc binary), but to keep
  * it dependency-light it does NOT implement yamux or TLS, so the frps MUST be
  * configured with:

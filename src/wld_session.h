@@ -1,5 +1,5 @@
 /*
- * wetland — one tunnelled session (relay/auto-tunnel + rendezvous + handshake +
+ * wetland - one tunnelled session (relay/auto-tunnel + rendezvous + handshake +
  * greeting + serve), factored out of the client's main() so the lab module can
  * also run a listener (`wld lab <tech> -l/-i/-e`).
  *

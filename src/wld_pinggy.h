@@ -1,9 +1,9 @@
 /*
- * wetland — pinggy reverse-tunnel backend (zero-config, no account).
+ * wetland - pinggy reverse-tunnel backend (zero-config, no account).
  *
  * Starts an embedded relay (127.0.0.1, ephemeral port) and exposes it on a
  * public address by spawning the system `ssh` to pinggy.io's free TCP tunnel
- * (no account). pinggy does the forwarding, so there is no proxy code here —
+ * (no account). pinggy does the forwarding, so there is no proxy code here -
  * just the relay thread plus a supervised `ssh` child whose assigned public
  * `tcp://host:port` is parsed and returned.
  *

@@ -1,5 +1,5 @@
 /*
- * wetland — encrypted transport pump
+ * wetland - encrypted transport pump
  *
  * Relays bytes between a local endpoint (a read fd + a write fd, which may be
  * the same, e.g. a socket or a PTY master) and the end-to-end tunnel socket,

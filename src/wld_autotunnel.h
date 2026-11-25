@@ -1,9 +1,9 @@
 /*
- * wetland — zero-config tunnel selector.
+ * wetland - zero-config tunnel selector.
  *
  * Shared by the listener (`-l`) and the lab module (`wld lab --tunnel`): brings
  * up the embedded relay and a public reverse tunnel, choosing the backend from
- * the environment — WLD_FRP_SERVER -> frp; WLD_BORE_HOST -> bore; else pinggy.
+ * the environment - WLD_FRP_SERVER -> frp; WLD_BORE_HOST -> bore; else pinggy.
  */
 #ifndef WLD_AUTOTUNNEL_H
 #define WLD_AUTOTUNNEL_H 1
@@ -11,7 +11,7 @@
 #include <stddef.h>
 
 /*
- * Open the tunnel. Prints the "no relay configured — ... tunnel..." line.
+ * Open the tunnel. Prints the "no relay configured - ... tunnel..." line.
  * Fills local_port (the embedded relay's loopback port), pub_host/pub_port (the
  * public endpoint for the connector) and, if the backend expires (pinggy),
  * *expiry_secs (>0). Returns 0 on success, -1 otherwise (local_port may still

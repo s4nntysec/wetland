@@ -1,5 +1,5 @@
 /*
- * wetland — platform compatibility shim.
+ * wetland - platform compatibility shim.
  *
  * Papers over the differences between POSIX sockets and Winsock so the relay
  * and the networking helpers build unchanged on Linux, macOS and Windows.

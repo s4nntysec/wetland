@@ -1,5 +1,5 @@
 /*
- * wetland — wire protocol (client <-> relay rendezvous layer)
+ * wetland - wire protocol (client <-> relay rendezvous layer)
  *
  * This layer is cleartext metadata: the relay must see the 16-byte rendezvous
  * address to pair two peers. It never sees the secret, the PSK or any payload.
@@ -54,7 +54,7 @@ struct wld_hello {
  */
 enum {
 	WLD_R_WAIT  = 0x10,  /* registered / waiting for peer         */
-	WLD_R_START = 0x11,  /* peer matched — tunnel begins now       */
+	WLD_R_START = 0x11,  /* peer matched - tunnel begins now       */
 	WLD_R_ERR   = 0x12,  /* followed by 1 error-code byte; closing */
 	WLD_R_PING  = 0x13,  /* keepalive (either direction, pre-START)*/
 	WLD_R_PONG  = 0x14,

@@ -1,5 +1,5 @@
 /*
- * wetland — pinggy reverse-tunnel backend (see wld_pinggy.h).
+ * wetland - pinggy reverse-tunnel backend (see wld_pinggy.h).
  *
  * Brings up the in-process embedded relay on a loopback port, then opens a
  * public TCP reverse tunnel to it through pinggy over ssh, and reports the
@@ -81,6 +81,7 @@ reader_thread(LPVOID arg)
 	char buf[1024]; DWORD n;
 	for (;;) {
 		if (!ReadFile(rc->pipe, buf, sizeof buf, &n, NULL) || n == 0) break;
+		if (g_verbose) { fprintf(stderr, "[wld-pinggy/ssh] %.*s", (int)n, buf); fflush(stderr); }
 		if (!rc->found) {
 			size_t room = sizeof acc - 1 - alen;
 			if (room == 0) { alen = 0; room = sizeof acc - 1; }
@@ -254,6 +255,7 @@ reader_thread(void *arg)
 	for (;;) {
 		ssize_t n = read(rc->fd, buf, sizeof buf);
 		if (n <= 0) break;
+		if (g_verbose) { fprintf(stderr, "[wld-pinggy/ssh] %.*s", (int)n, buf); fflush(stderr); }
 		if (!rc->found) {
 			size_t room = sizeof acc - 1 - alen;
 			if (room == 0) { alen = 0; room = sizeof acc - 1; } /* reset on overflow */
@@ -372,7 +374,7 @@ wld_pinggy_drain(int max_ms)
 	 * The embedded relay runs in a thread of THIS process and ssh forwards
 	 * from it. On exit, wait for the relay to flush and close its connections
 	 * (live conns -> 0), then a short grace for ssh to push the last bytes to
-	 * the peer, before tearing the tunnel down — so a one-shot transfer is not
+	 * the peer, before tearing the tunnel down - so a one-shot transfer is not
 	 * truncated.
 	 */
 	int waited = 0;

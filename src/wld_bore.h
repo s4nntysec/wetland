@@ -1,5 +1,5 @@
 /*
- * wetland — bore-style reverse tunnel client.
+ * wetland - bore-style reverse tunnel client.
  *
  * Speaks the control protocol of ekzhang/bore (https://github.com/ekzhang/bore)
  * so a listener behind NAT can expose a locally-running relay through a public

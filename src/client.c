@@ -1,5 +1,5 @@
 /*
- * wld — the wetland client.
+ * wld - the wetland client.
  *
  * Derives a rendezvous address + PSK from a shared secret, meets its peer at
  * the relay, runs the end-to-end handshake and then tunnels data. Modes:
@@ -251,7 +251,7 @@ mode_pty_client(int tun, wld_session *sess)
  * secret, so both peers land on the same relay with no extra coordination.
  */
 
-/* Built-in fallback pool. Empty by default — add relays you actually run. */
+/* Built-in fallback pool. Empty by default - add relays you actually run. */
 static const char *const builtin_pool[] = {
 	/* "relay.example.net:7440", */
 	NULL
@@ -331,7 +331,7 @@ static void
 usage(const char *p)
 {
 	fprintf(stderr,
-"wld — wetland client (connect like there is no firewall, securely)\n"
+"wld - wetland client (connect like there is no firewall, securely)\n"
 "\n"
 "usage: %s [options]\n"
 "  -s SECRET   shared secret (both peers must match)\n"
@@ -428,14 +428,14 @@ wld_run_session(const struct wld_session_opts *o)
 				host = "127.0.0.1";
 				port = lport;
 				fprintf(stderr,
-				    "wld: tunnel up at %s:%d — the other side runs:\n"
+				    "wld: tunnel up at %s:%d - the other side runs:\n"
 				    "       wld -s <secret> -H %s -p %d%s\n",
 				    pubhost, pubport, pubhost, pubport,
 				    interactive ? " -i" : "");
 			} else if (lport[0] != '\0') {
 				host = "127.0.0.1";
 				port = lport;
-				fprintf(stderr, "wld: tunnel failed — relay is LOCAL-ONLY on "
+				fprintf(stderr, "wld: tunnel failed - relay is LOCAL-ONLY on "
 				    "127.0.0.1:%s (same host/LAN). Re-run with -v to see why "
 				    "(pinggy needs an ssh client); or set WLD_BORE_HOST / "
 				    "WLD_FRP_SERVER, or pass -H.\n", lport);
@@ -493,7 +493,7 @@ wld_run_session(const struct wld_session_opts *o)
 		greet[0] = '\0';
 		if (tunnel_expiry_secs > 0)
 			snprintf(greet, sizeof greet,
-			    "wld: note — this link uses a free pinggy tunnel that expires in "
+			    "wld: note - this link uses a free pinggy tunnel that expires in "
 			    "~%ld min; if it drops, reconnect with the address the operator "
 			    "shares.", tunnel_expiry_secs / 60);
 		if (wld_tunnel_send_greeting(tun, &sess, greet) != 0)
@@ -611,7 +611,7 @@ wld_client_run(int argc, char **argv)
 	 * Explicit process masquerade (-M): rename this process so `ps` shows the
 	 * given name instead of `./wld ...` (T1036). Opt-in, not the default. argv
 	 * is overwritten, so copy the strings we still need off it first. Still
-	 * detectable via /proc/pid/exe — see docs/PURPLE-LAB.md.
+	 * detectable via /proc/pid/exe - see docs/PURPLE-LAB.md.
 	 */
 	if (masq_name != NULL) {
 		char *mn = strdup(masq_name);
