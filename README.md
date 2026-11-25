@@ -301,6 +301,26 @@ the built-in **OpenSSH** client (`ssh.exe`; add it under *Settings → System �
 Optional features* if missing). Free pinggy tunnels get a
 random address and expire after ~60 min — just re-run `wld -l` to refresh.
 
+### Windows: open a port on the router (no tunnel, no third party)
+
+On **Windows**, `wld -l` first tries to make the listener reachable with **no
+relay, no separate server and no third-party service** by asking the local router
+to forward a port — **NAT-PMP** (RFC 6886) first, then **UPnP-IGD**:
+
+```
+wld.exe -g -l
+wld: no relay configured — opened a port on the router (NAT-PMP/UPnP); no tunnel needed
+wld: tunnel up at 203.0.113.7:51820 — the other side runs:
+       wld -s <secret> -H 203.0.113.7 -p 51820
+```
+
+It starts the embedded relay on all interfaces, maps that port on the router,
+advertises your **public IP:port**, and **removes the mapping on exit**. If the
+router has UPnP/NAT-PMP disabled, or you are behind **CGNAT** (the mapped address
+comes back private — carrier NAT, common on mobile/4G), it says so and falls back
+to the **pinggy tunnel** automatically. This path is Windows-only; on Linux/macOS
+`wld -l` uses the pinggy tunnel.
+
 ### Alternative backend: bore (no `ssh` dependency)
 
 Set **`WLD_BORE_HOST`** (e.g. `bore.pub`) to use
@@ -582,13 +602,15 @@ the rest (see [Platform support](#platform-support)).
 | macOS    | ✅ | ✅ | ✅ | ✅ |
 | Windows  | ✅ | ✅ | ✅ (needs OpenSSH `ssh.exe`) | ⛔ (use WSL for now) |
 
-The **zero-config tunnel** (`-l` auto-starts the embedded relay + a public pinggy
-tunnel when no relay is reachable) now works on Windows too: the embedded relay
-runs on a Win32 thread and the tunnel is opened by spawning the built-in OpenSSH
-`ssh.exe` (killed with the process via a Job Object). The `wld lab` evasion
-module and the interactive PTY shell / `-e` execution on the listening side remain
-POSIX-only for now — on Windows the client uses a thread-based I/O loop because the
-console cannot be watched with `WSAPoll`.
+The **zero-config listener** (`-l` with no relay reachable) works on Windows too.
+On Windows it first opens a port on the router directly via **NAT-PMP / UPnP-IGD**
+(no relay, server or third party — see [Zero-config tunnel](#zero-config-tunnel));
+if that is unavailable (CGNAT / UPnP off) it falls back to the **pinggy tunnel**,
+with the embedded relay on a Win32 thread and `ssh.exe` spawned under a Job Object
+(killed with the process). The `wld lab` evasion module and the interactive PTY
+shell / `-e` execution on the listening side remain POSIX-only for now — on Windows
+the client uses a thread-based I/O loop because the console cannot be watched with
+`WSAPoll`.
 
 ---
 

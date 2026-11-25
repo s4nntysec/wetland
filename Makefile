@@ -25,7 +25,7 @@ ifneq (,$(findstring MINGW,$(UNAME_S))$(findstring MSYS,$(UNAME_S))$(findstring 
 endif
 
 ifdef WIN_NATIVE
-  LIBS_CLIENT = -lws2_32 -lbcrypt
+  LIBS_CLIENT = -lws2_32 -lbcrypt -liphlpapi
   LIBS_RELAY  = -lws2_32 -lbcrypt
 else ifeq ($(UNAME_S),Linux)
   # forkpty lives in -lutil on Linux; it's in libc on macOS/BSD.
@@ -39,7 +39,7 @@ endif
 
 MONO       = src/monocypher/monocypher.c
 COMMON_SRC = src/wld_crypto.c src/wld_net.c $(MONO)
-CLIENT_SRC = src/client.c src/wld_tunnel.c src/wld_lab.c src/wld_autotunnel.c src/wld_bore.c src/wld_frp.c src/wld_pinggy.c src/wld_relay.c $(COMMON_SRC)
+CLIENT_SRC = src/client.c src/wld_tunnel.c src/wld_lab.c src/wld_autotunnel.c src/wld_bore.c src/wld_frp.c src/wld_pinggy.c src/wld_natmap.c src/wld_relay.c $(COMMON_SRC)
 RELAY_SRC  = src/relay.c src/wld_relay.c $(COMMON_SRC)
 
 BIN = bin/wld bin/wetland-relay
@@ -71,7 +71,7 @@ test: all bin/test_crypto
 # --- Windows cross-compile (mingw-w64) ---
 MINGW ?= x86_64-w64-mingw32-gcc
 WINCFLAGS = -O2 -std=c11 -Wall -Wextra -Wno-unused-parameter -Isrc
-WINLIBS   = -lws2_32 -lbcrypt
+WINLIBS   = -lws2_32 -lbcrypt -liphlpapi
 
 windows:
 	@mkdir -p dist/windows

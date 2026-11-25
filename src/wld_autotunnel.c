@@ -5,6 +5,7 @@
 #include "wld_bore.h"
 #include "wld_frp.h"
 #include "wld_pinggy.h"
+#include "wld_natmap.h"
 #include "wld_crypto.h"
 
 #include <stdint.h>
@@ -51,6 +52,21 @@ wld_open_tunnel(const char *secret, int verbose,
 		    "tunnel...\n", bore_host);
 		return wld_bore_autotunnel(bore_host, req, verbose, lp, lpc, ph, phc, pp);
 	}
+#ifdef _WIN32
+	/* Windows default: open a port on the local router directly — no relay, no
+	 * separate server, no third-party service (NAT-PMP, then UPnP-IGD). Falls
+	 * through to the pinggy tunnel if the router won't map (CGNAT/disabled). */
+	{
+		int rm = wld_natmap_open(verbose, lp, lpc, ph, phc, pp);
+		if (rm == 0) {
+			fprintf(stderr, "wld: no relay configured — opened a port on the "
+			    "router (NAT-PMP/UPnP); no tunnel needed\n");
+			return 0;
+		}
+		fprintf(stderr, "wld: router port-mapping unavailable — trying a public "
+		    "tunnel instead...\n");
+	}
+#endif
 	fprintf(stderr, "wld: no relay configured — embedded relay + pinggy tunnel...\n");
 	int r = wld_pinggy_autotunnel(verbose, lp, lpc, ph, phc, pp);
 	if (r == 0 && expiry_secs) *expiry_secs = 55 * 60; /* pinggy free ~60 min */
@@ -60,6 +76,7 @@ wld_open_tunnel(const char *secret, int verbose,
 void
 wld_tunnel_drain_all(int max_ms)
 {
+	wld_natmap_drain(max_ms);
 	wld_bore_drain(max_ms);
 	wld_frp_drain(max_ms);
 	wld_pinggy_drain(max_ms);
