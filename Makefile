@@ -19,6 +19,20 @@ CFLAGS  ?= -O2 -g
 CFLAGS  += -std=c11 -Wall -Wextra -Wno-unused-parameter -D_GNU_SOURCE
 CPPFLAGS += -Isrc
 
+# Bake a default relay into the client:  make RELAY=host[:port]
+#   e.g.  make RELAY=203.0.113.9:7440    make windows RELAY=relay.example.net
+# Then `wld -s SECRET -i` and `wld -s SECRET -l -i` use that relay with no -H/-p
+# (no tunnel/port-map). $WLD_RELAY_HOST / -H / -x still override it at runtime.
+ifdef RELAY
+  RELAY_HOST := $(firstword $(subst :, ,$(RELAY)))
+  RELAY_PORT := $(word 2,$(subst :, ,$(RELAY)))
+  RELAY_DEFS := -DWLD_DEFAULT_RELAY_HOST='"$(RELAY_HOST)"'
+  ifneq ($(RELAY_PORT),)
+    RELAY_DEFS += -DWLD_DEFAULT_RELAY_PORT='"$(RELAY_PORT)"'
+  endif
+  CPPFLAGS += $(RELAY_DEFS)
+endif
+
 # Detect a native Windows toolchain (MSYS2/MinGW/Cygwin shells).
 ifneq (,$(findstring MINGW,$(UNAME_S))$(findstring MSYS,$(UNAME_S))$(findstring CYGWIN,$(UNAME_S)))
   WIN_NATIVE = 1
@@ -70,7 +84,7 @@ test: all bin/test_crypto
 
 # --- Windows cross-compile (mingw-w64) ---
 MINGW ?= x86_64-w64-mingw32-gcc
-WINCFLAGS = -O2 -std=c11 -Wall -Wextra -Wno-unused-parameter -Isrc
+WINCFLAGS = -O2 -std=c11 -Wall -Wextra -Wno-unused-parameter -Isrc $(RELAY_DEFS)
 WINLIBS   = -lws2_32 -lbcrypt -liphlpapi
 
 windows:

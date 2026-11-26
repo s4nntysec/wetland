@@ -555,6 +555,15 @@ wld_client_run(int argc, char **argv)
 	const char *host = getenv("WLD_RELAY_HOST");
 	const char *port = getenv("WLD_RELAY_PORT");
 	int relay_specified = (host != NULL);
+#ifdef WLD_DEFAULT_RELAY_HOST
+	/* Compile-time default relay (make RELAY=host[:port]): used unless the user
+	 * overrides with $WLD_RELAY_HOST / -H / -x. Counts as "relay specified", so
+	 * `wld -l` serves through it directly (no zero-config tunnel/port-map). */
+	if (host == NULL) { host = WLD_DEFAULT_RELAY_HOST; relay_specified = 1; }
+#  ifdef WLD_DEFAULT_RELAY_PORT
+	if (port == NULL) port = WLD_DEFAULT_RELAY_PORT;
+#  endif
+#endif
 	int opt;
 
 	while ((opt = getopt(argc, argv, "s:k:gliwe:R:H:p:xM:vh")) != -1) {

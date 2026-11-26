@@ -118,6 +118,56 @@ on one TCP port from both sides, so any cheap VPS works.
 
 Make sure the chosen TCP port is open in the host's firewall.
 
+### Free, always-on relay (and make it the app default)
+
+A relay is tiny and only needs **one open TCP port on a public IP**, so a
+**free-forever micro VM** is plenty:
+
+- **Oracle Cloud "Always Free"** (ARM Ampere or AMD micro) or **Google Cloud
+  always-free `e2-micro`** — both give a real VM with a public IP, free forever.
+  (AWS `t2.micro` is free for 12 months only.) Any Linux VM with a public IP works.
+
+On the VM:
+
+```sh
+# 1) get the binary (build it, or copy the released Linux build):
+#    curl -fsSL -o wetland-relay https://github.com/s4nntysec/wetland/releases/download/v0.1.0/wetland-relay-linux-x86_64 && chmod +x wetland-relay
+# 2) open the port in BOTH the cloud firewall (security list / VPC rule) and the OS:
+sudo ufw allow 7440/tcp     # or: iptables / firewalld
+# 3) keep it running across reboots with systemd:
+sudo tee /etc/systemd/system/wetland-relay.service >/dev/null <<'UNIT'
+[Unit]
+Description=wetland relay
+After=network-online.target
+[Service]
+ExecStart=/opt/wetland/wetland-relay -p 7440
+Restart=always
+User=nobody
+[Install]
+WantedBy=multi-user.target
+UNIT
+sudo mkdir -p /opt/wetland && sudo mv wetland-relay /opt/wetland/ \
+  && sudo systemctl enable --now wetland-relay
+```
+
+Then **bake that relay as the client default** so nobody needs `-H/-p`:
+
+```sh
+make RELAY=<your-relay-public-ip>:7440            # Linux/macOS build
+make windows RELAY=<your-relay-public-ip>:7440    # Windows build
+```
+
+Now the baked `wld` just works, anywhere, no flags:
+
+```sh
+wld -s SECRET -l -i        # listener (NAT'd box) -> meets at your relay
+wld -s SECRET -i           # connector (anywhere) -> same relay, gets the shell
+```
+
+The baked relay counts as "relay specified", so `wld -l` serves through it
+directly — no zero-config tunnel / port-map. `$WLD_RELAY_HOST`, `-H` or `-x`
+still override it at runtime.
+
 ---
 
 ## Using the client (`wld`)
