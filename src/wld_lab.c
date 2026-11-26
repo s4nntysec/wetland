@@ -13,7 +13,6 @@
 #include "wld_lab.h"
 #include "wld_compat.h"
 #include "wld_net.h"
-#include "wld_autotunnel.h"
 #include "wld_session.h"
 
 #include <stdarg.h>
@@ -663,11 +662,8 @@ lab_usage(void)
 "  uninstall        remove every " LAB_MARKER " artifact this tool creates.\n"
 "  detections       print the ATT&CK -> detection mapping for all techniques.\n"
 "\n"
-"  --tunnel         (any technique) also open the zero-config public tunnel\n"
-"                   (same as `wld -l`: embedded relay + pinggy/bore/frp), and\n"
-"                   print the public host:port.\n"
 "  -l / -i / -e CMD (any technique) also run a REAL listener via the client\n"
-"                   flow (embedded relay + zero-config tunnel, like `wld -l`):\n"
+"                   flow (meets at the configured relay, like `wld -l`):\n"
 "                     masquerade -l  -> listener shown under the fake name\n"
 "                     beacon -l      -> listener + background C2 beacon\n"
 "                     persist -l     -> listener persisted across reboots\n"
@@ -690,20 +686,13 @@ wld_lab_main(int argc, char **argv)
 	if (argc <= ti) return lab_usage();
 	const char *tech = argv[ti];
 
-	/* Pull out an optional, explicit `--tunnel`: brings up the embedded relay
-	 * + zero-config public tunnel (same as `wld -l`) before the technique runs,
-	 * so a lab command can be reached from outside. Opt-in, printed, not wired
-	 * into `-l`. The remaining args are passed through to the technique. */
-	int want_tunnel = 0;
 	int raw_argc = argc - (ti + 1);
 	char **raw = argv + (ti + 1);
 	char **sub_argv = malloc(sizeof(char *) * (size_t)(raw_argc + 1));
 	if (sub_argv == NULL) return 1;
 	int sub_argc = 0;
-	for (int i = 0; i < raw_argc; i++) {
-		if (strcmp(raw[i], "--tunnel") == 0) { want_tunnel = 1; continue; }
+	for (int i = 0; i < raw_argc; i++)
 		sub_argv[sub_argc++] = raw[i];
-	}
 	sub_argv[sub_argc] = NULL;
 
 	/*
@@ -837,17 +826,6 @@ wld_lab_main(int argc, char **argv)
 		return 2;
 	}
 
-	if (want_tunnel) {
-		static char lport[16], pubhost[256];
-		int pubport = 0; long exp = 0;
-		if (wld_open_tunnel("wld-lab", 1, lport, sizeof lport,
-		    pubhost, sizeof pubhost, &pubport, &exp) == 0)
-			labf("tunnel up - public %s:%d (reaches the embedded relay)",
-			    pubhost, pubport);
-		else
-			labf("tunnel failed; continuing local-only");
-	}
-
 	int rc;
 	if (strcmp(tech, "masquerade") == 0)
 		rc = do_masquerade(sub_argc, sub_argv, argv, argc);
@@ -872,7 +850,6 @@ wld_lab_main(int argc, char **argv)
 	}
 
 	free(sub_argv);
-	if (want_tunnel) wld_tunnel_drain_all(10000);
 	return rc;
 }
 

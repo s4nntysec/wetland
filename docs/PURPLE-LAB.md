@@ -25,18 +25,15 @@ wld lab <technique> [options]
   uninstall
   detections
 
-  <technique> --tunnel     also open the zero-config public tunnel (like `wld -l`)
-  <technique> -l [-i|-e C] also run a REAL listener (embedded relay + tunnel)
+  <technique> -l [-i|-e C] also run a REAL listener via the client flow
 ```
 
 `wld lab detections` prints the whole mapping below without executing anything.
-`--tunnel` on any technique brings up the embedded relay + a public tunnel
-(pinggy/bore/frp) and prints the public `host:port`.
 
 ### Running a real listener inside a technique (`-l`)
 
 Any technique can also carry the full client flow — the same `-l` / `-l -g`
-system as `wld -l` (embedded relay + zero-config public tunnel) — so one command
+system as `wld -l` (meets at the configured relay) — so one command
 both performs the TTP and serves a real, E2E-encrypted listener the blue team can
 catch end to end. Short-dash flags (`-s -k -g -l -i -e -H -p -M …`) go to the
 listener; the technique keeps its own `--long` flags.
@@ -218,7 +215,7 @@ and beacon leave nothing on disk — they end when the process exits.
 ## Safety model
 
 - All techniques live behind the explicit `wld lab …` subcommand; the normal
-  tunnel path is untouched.
+  client path is untouched.
 - Artifacts are tagged and reversible; payloads default to harmless heartbeats.
 - Techniques are tuned to be *detectable*, not covert. This is deliberately a
   poor base for a real implant — that is the point.

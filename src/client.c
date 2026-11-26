@@ -15,8 +15,17 @@
 #include "wld_crypto.h"
 #include "wld_tunnel.h"
 #include "wld_lab.h"
-#include "wld_autotunnel.h"
 #include "wld_session.h"
+
+/* Built-in default relay — baked so `wld -s SECRET -i` / `-l -i` just work with no
+ * -H/-p. Override at build with `make RELAY=host[:port]`, or at runtime with
+ * $WLD_RELAY_HOST / -H / -x. */
+#ifndef WLD_DEFAULT_RELAY_HOST
+#define WLD_DEFAULT_RELAY_HOST "144.22.201.75"
+#endif
+#ifndef WLD_DEFAULT_RELAY_PORT
+#define WLD_DEFAULT_RELAY_PORT "7440"
+#endif
 
 #include "wld_compat.h"
 
@@ -342,8 +351,8 @@ usage(const char *p)
 "  -e CMD      execute CMD, wire its stdio to the tunnel\n"
 "  -w          (connect) wait for the listener to appear\n"
 "  -R SECS     rotate the rendezvous address every SECS seconds\n"
-"  -H HOST     relay host (default: $WLD_RELAY_HOST or 127.0.0.1)\n"
-"  -p PORT     relay port (default: $WLD_RELAY_PORT or %s)\n"
+"  -H HOST     relay host (default: %s, or $WLD_RELAY_HOST)\n"
+"  -p PORT     relay port (default: %s, or $WLD_RELAY_PORT)\n"
 "  -x          pick a public relay from the pool ($WLD_RELAY_POOL),\n"
 "              chosen deterministically from the secret (both peers agree)\n"
 "  -M NAME     masquerade this process's name in ps / /proc (T1036); e.g.\n"
@@ -351,25 +360,18 @@ usage(const char *p)
 "              via /proc/pid/exe (see docs/PURPLE-LAB.md).\n"
 "  -v          verbose\n"
 "\n"
-"zero-config listener: with -l and no relay set (no -H/-x/$WLD_RELAY_HOST)\n"
-"and nothing on the default relay port, wld starts an embedded relay and a\n"
-"public reverse tunnel, then prints the -H/-p line for the other side.\n"
-"  default: pinggy tunnel (free, no account; needs an ssh client)\n"
-"  bore:    set $WLD_BORE_HOST (e.g. bore.pub; no account, native, no ssh)\n"
-"  frp:     set $WLD_FRP_SERVER (self-hosted frps, tcpMux=false)\n"
-"\n"
 "examples:\n"
 "  wld -g -l -i                 # serve a shell, prints the secret to share\n"
 "  wld -s <secret> -i           # log into that shell from anywhere\n"
 "  wld -l -e 'cat > out.bin'     # receive a file\n"
 "  wld -s <secret> < in.bin      # send it\n",
-	    p, WLD_RELAY_DEFAULT_PORT);
+	    p, WLD_DEFAULT_RELAY_HOST, WLD_DEFAULT_RELAY_PORT);
 	exit(1);
 }
 
 /*
- * Run one session: relay selection / zero-config tunnel, rendezvous, handshake,
- * greeting and serve. Shared by main() and the lab module. Crypto/net must be
+ * Run one session: relay selection, rendezvous, handshake, greeting and serve.
+ * Shared by main() and the lab module. Crypto/net must be
  * initialised and any -M masquerade already applied by the caller.
  */
 int
@@ -383,7 +385,7 @@ wld_run_session(const struct wld_session_opts *o)
 	int wait_flag = o->wait_flag, use_pool = o->use_pool;
 	int relay_specified = o->relay_specified;
 	long epoch_secs = o->epoch_secs;
-	long tunnel_expiry_secs = 0;
+	(void)relay_specified;
 
 	if (host == NULL) host = "127.0.0.1";
 	if (port == NULL) port = WLD_RELAY_DEFAULT_PORT;
@@ -409,40 +411,6 @@ wld_run_session(const struct wld_session_opts *o)
 		host = pool[idx].host;
 		port = pool[idx].port;
 		VLOG("wld: public relay %d/%d -> %s:%s\n", idx + 1, npool, host, port);
-	}
-
-	/* Zero-config listener: no relay + nothing on the default port -> embedded
-	 * relay + public tunnel (pinggy default; WLD_BORE_HOST / WLD_FRP_SERVER).
-	 * Works on POSIX and Windows (Windows pinggy spawns OpenSSH's ssh.exe). */
-	if (listen_mode && !use_pool && !relay_specified) {
-		int probe = wld_tcp_connect(host, port);
-		if (probe >= 0) {
-			wld_closesocket(probe);
-			VLOG("wld: using relay already running at %s:%s\n", host, port);
-		} else {
-			static char lport[16], pubhost[256];
-			int pubport = 0;
-			int r = wld_open_tunnel(secret, g_verbose, lport, sizeof lport,
-			    pubhost, sizeof pubhost, &pubport, &tunnel_expiry_secs);
-			if (r == 0) {
-				host = "127.0.0.1";
-				port = lport;
-				fprintf(stderr,
-				    "wld: tunnel up at %s:%d - the other side runs:\n"
-				    "       wld -s <secret> -H %s -p %d%s\n",
-				    pubhost, pubport, pubhost, pubport,
-				    interactive ? " -i" : "");
-			} else if (lport[0] != '\0') {
-				host = "127.0.0.1";
-				port = lport;
-				fprintf(stderr, "wld: tunnel failed - relay is LOCAL-ONLY on "
-				    "127.0.0.1:%s (same host/LAN). Re-run with -v to see why "
-				    "(pinggy needs an ssh client); or set WLD_BORE_HOST / "
-				    "WLD_FRP_SERVER, or pass -H.\n", lport);
-			} else {
-				die("auto relay/tunnel failed; run wetland-relay and pass -H/-p");
-			}
-		}
 	}
 
 	uint64_t epoch0 = 0;
@@ -486,16 +454,12 @@ wld_run_session(const struct wld_session_opts *o)
 	VLOG("wld: secure channel established\n");
 	wld_wipe(psk, sizeof psk);
 
-	/* One-way post-handshake greeting (listener -> connector): only the
-	 * connector prints it (tunnel-expiry heads-up). Always exchanged. */
+	/* One-way post-handshake greeting (listener -> connector), always exchanged
+	 * to keep the record counters symmetric. Empty unless there's something to
+	 * say; the connector prints it when non-empty. */
 	if (listen_mode) {
 		char greet[256];
 		greet[0] = '\0';
-		if (tunnel_expiry_secs > 0)
-			snprintf(greet, sizeof greet,
-			    "wld: note - this link uses a free pinggy tunnel that expires in "
-			    "~%ld min; if it drops, reconnect with the address the operator "
-			    "shares.", tunnel_expiry_secs / 60);
 		if (wld_tunnel_send_greeting(tun, &sess, greet) != 0)
 			die("greeting failed");
 	} else {
@@ -531,10 +495,6 @@ wld_run_session(const struct wld_session_opts *o)
 #endif
 
 	wld_closesocket(tun);
-#ifndef _WIN32
-	/* Let any in-flight auto-tunnel data finish before we exit. No-op if none. */
-	wld_tunnel_drain_all(10000);
-#endif
 	return rc == 0 ? 0 : 1;
 }
 
@@ -556,9 +516,8 @@ wld_client_run(int argc, char **argv)
 	const char *port = getenv("WLD_RELAY_PORT");
 	int relay_specified = (host != NULL);
 #ifdef WLD_DEFAULT_RELAY_HOST
-	/* Compile-time default relay (make RELAY=host[:port]): used unless the user
-	 * overrides with $WLD_RELAY_HOST / -H / -x. Counts as "relay specified", so
-	 * `wld -l` serves through it directly (no zero-config tunnel/port-map). */
+	/* Built-in default relay (top of file; override at build with
+	 * make RELAY=host[:port]). Used unless overridden with $WLD_RELAY_HOST/-H/-x. */
 	if (host == NULL) { host = WLD_DEFAULT_RELAY_HOST; relay_specified = 1; }
 #  ifdef WLD_DEFAULT_RELAY_PORT
 	if (port == NULL) port = WLD_DEFAULT_RELAY_PORT;

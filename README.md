@@ -37,15 +37,14 @@ The project is written in C with **no external dependencies**, and builds for
 4. [Using the client (`wld`)](#using-the-client-wld)
 5. [Command reference](#command-reference)
 6. [Public relay pool (`-x`)](#public-relay-pool--x)
-7. [Zero-config tunnel](#zero-config-tunnel)
-8. [How it works](#how-it-works)
-9. [Security notes](#security-notes)
-10. [Purple-team lab (`wld lab`)](#purple-team-lab-wld-lab)
-11. [Troubleshooting](#troubleshooting)
-12. [Platform support](#platform-support)
-13. [Project layout and tests](#project-layout-and-tests)
-14. [Roadmap](#roadmap)
-15. [License](#license)
+7. [How it works](#how-it-works)
+8. [Security notes](#security-notes)
+9. [Purple-team lab (`wld lab`)](#purple-team-lab-wld-lab)
+10. [Troubleshooting](#troubleshooting)
+11. [Platform support](#platform-support)
+12. [Project layout and tests](#project-layout-and-tests)
+13. [Roadmap](#roadmap)
+14. [License](#license)
 
 ---
 
@@ -164,9 +163,10 @@ wld -s SECRET -l -i        # listener (NAT'd box) -> meets at your relay
 wld -s SECRET -i           # connector (anywhere) -> same relay, gets the shell
 ```
 
-The baked relay counts as "relay specified", so `wld -l` serves through it
-directly — no zero-config tunnel / port-map. `$WLD_RELAY_HOST`, `-H` or `-x`
-still override it at runtime.
+`wld` ships with a **built-in default relay** already baked in, so `wld -s SECRET
+-i` and `wld -s SECRET -l -i` work with no `-H/-p` out of the box. Rebuild with
+`make RELAY=host[:port]` to point at your own, or override per-run with
+`$WLD_RELAY_HOST` / `-H` / `-x`.
 
 ---
 
@@ -318,123 +318,6 @@ pool.
 
 ---
 
-## Zero-config tunnel
-
-If you run a **listener** (`-l`) with **no relay configured** (no `-H`, no `-x`,
-no `$WLD_RELAY_HOST`) and nothing is already listening on the default relay port,
-`wld` bootstraps everything itself:
-
-1. starts a **relay in-process** (on `127.0.0.1`, an ephemeral port), and
-2. exposes it through a **public reverse tunnel**,
-
-then prints the exact command for the other side:
-
-```sh
-$ wld -g -l -i
-wld: generated secret: 7Kp9mXr...
-wld: no relay configured — embedded relay + pinggy tunnel...
-wld: tunnel up at abcd-1-2-3-4.a.free.pinggy.link:43187 — the other side runs:
-       wld -s <secret> -H abcd-1-2-3-4.a.free.pinggy.link -p 43187 -i
-```
-
-The connector just runs that line. The relay stays **blind** (sees only the
-16-byte address + ciphertext); the tunnel only moves bytes, so the end-to-end
-encryption is unchanged.
-
-### Default backend: pinggy (free, no account)
-
-By default `wld` opens a free **[pinggy](https://pinggy.io)** TCP tunnel by
-spawning the system **`ssh`** (`ssh -p443 -R0:localhost:<relay> tcp@a.pinggy.io`).
-No account, and it works from datacenter IPs. Its one requirement is an **`ssh`
-client** — present on virtually every Linux/macOS host, and on Windows 10/11 via
-the built-in **OpenSSH** client (`ssh.exe`; add it under *Settings → System →
-Optional features* if missing). Free pinggy tunnels get a
-random address and expire after ~60 min — just re-run `wld -l` to refresh.
-
-### Windows: open a port on the router (no tunnel, no third party)
-
-On **Windows**, `wld -l` first tries to make the listener reachable with **no
-relay, no separate server and no third-party service** by asking the local router
-to forward a port — **NAT-PMP** (RFC 6886) first, then **UPnP-IGD**:
-
-```
-wld.exe -g -l
-wld: no relay configured — opened a port on the router (NAT-PMP/UPnP); no tunnel needed
-wld: tunnel up at 203.0.113.7:51820 — the other side runs:
-       wld -s <secret> -H 203.0.113.7 -p 51820
-```
-
-It starts the embedded relay on all interfaces, maps that port on the router,
-advertises your **public IP:port**, and **removes the mapping on exit**. If the
-router has UPnP/NAT-PMP disabled, or you are behind **CGNAT** (the mapped address
-comes back private — carrier NAT, common on mobile/4G, and typical inside VMs with
-no UPnP gateway), it falls back automatically to the **native bore tunnel**
-(`bore.pub`, no `ssh` dependency) and then to the **pinggy tunnel** (ssh). So the
-Windows order is: **router port map → bore → pinggy**. This port-mapping step is
-Windows-only; on Linux/macOS `wld -l` uses the pinggy tunnel.
-
-### Alternative backend: bore (no `ssh` dependency)
-
-Set **`WLD_BORE_HOST`** (e.g. `bore.pub`) to use
-**[bore](https://github.com/ekzhang/bore)** instead — the bore client is built
-into `wld`, so it needs **no host binary at all**:
-
-```sh
-export WLD_BORE_HOST=bore.pub
-wld -g -l -i      # -> prints: ... -H bore.pub -p <port> ...
-```
-
-> ⚠️ **bore.pub is flaky from cloud/datacenter IP ranges** (the connection to
-> `bore.pub:7835` often times out there); it is reliable from a residential
-> machine. That is why pinggy is the default.
-
-### Alternative backend: self-hosted frp
-
-Set **`WLD_FRP_SERVER`** to use [frp](https://github.com/fatedier/frp) against
-your own **frps**. The frp client is native (no `frpc` binary), but to stay
-dependency-light it does **not** do yamux or TLS, so the frps must set
-`transport.tcpMux = false` (and accept plaintext control, the default):
-
-```toml
-# frps.toml
-bindPort = 7000
-auth.token = "yoursecret"      # optional
-transport.tcpMux = false       # required for this client
-```
-
-```sh
-export WLD_FRP_SERVER=frp.example.com WLD_FRP_TOKEN=yoursecret
-wld -g -l -i      # -> prints: ... -H frp.example.com -p <port> ...
-```
-
-Backend selection: `WLD_FRP_SERVER` → frp; else `WLD_BORE_HOST` → bore; else
-pinggy (default).
-
-| Variable | Meaning |
-|----------|---------|
-| `WLD_BORE_HOST` / `WLD_BORE_PORT` | use bore; server (e.g. `bore.pub` / `7835`) |
-| `WLD_BORE_REMOTE_PORT` | fixed public port on a private bore server (default: bore chooses) |
-| `WLD_FRP_SERVER` | use frp; your frps host |
-| `WLD_FRP_PORT` | frps `bindPort` (default `7000`) |
-| `WLD_FRP_TOKEN` | frps `auth.token` (omit if none) |
-| `WLD_FRP_REMOTE_PORT` | fixed public port (default: derived from the secret) |
-
-Notes:
-- **pinggy** and **bore** let the server **choose** the public port — `wld`
-  prints the assigned `host:port` for the connector. **frp** derives the port
-  from the secret by default (your frps, so you control the allowed range); pin
-  bore/frp with `WLD_*_REMOTE_PORT`.
-- The embedded relay and tunnel run in background threads of the listener
-  process; on a one-shot pipe send (`wld -l < file`) `wld` waits for the transfer
-  to drain before exiting.
-- POSIX only (Linux/macOS); on Windows, pass a relay with `-H`/`-x`.
-- When the listener rides an expiring tunnel (pinggy), it sends a one-time
-  heads-up right after the handshake that the **connector prints** (the listener
-  stays quiet): `wld: note — this link uses a free pinggy tunnel that expires in
-  ~55 min; ...`.
-
----
-
 ## How it works
 
 1. **Key derivation.** Both peers run the secret through a keyed BLAKE2b key
@@ -495,13 +378,9 @@ wld lab detections                           # print the full detection mapping
 wld lab uninstall                            # remove every WETLAND-LAB artifact
 ```
 
-Any `wld lab` technique also takes **`--tunnel`**, which opens the same
-zero-config public tunnel as `wld -l` (embedded relay + pinggy/bore/frp) and
-prints the public `host:port` before running the technique.
-
 **Every** technique also accepts the listener flags **`-l` / `-i` / `-e CMD`**
 (plus `-s`/`-k`/`-g`/`-H`/`-M`/...), running a real listener via the client flow —
-the same embedded relay + zero-config tunnel as `wld -l`. The technique's own
+it meets at the configured relay, same as `wld -l`. The technique's own
 `--long` flags still apply:
 
 - `wld lab masquerade -g -l -i` — shell listener shown under the fake name.
@@ -595,27 +474,6 @@ export WLD_RELAY_POOL="relay1.example.net:7440,relay2.example.net,203.0.113.7:90
 ```
 See [Public relay pool](#public-relay-pool--x).
 
-### `wld: tunnel failed — relay is LOCAL-ONLY ...`
-
-The zero-config tunnel could not be set up, so the relay is only usable on the
-same host/LAN. Check, in order:
-
-- **Default (pinggy):** needs an **`ssh` client** on the host (`command -v ssh`).
-  With `-v` you'll see `[wld-pinggy] opening pinggy tunnel via ssh ...`; if ssh is
-  missing or can't reach `a.pinggy.io:443`, it fails. (Free pinggy tunnels also
-  expire after ~60 min — just re-run.)
-- **bore (`WLD_BORE_HOST` set):** that server's control port (`bore.pub` → 7835)
-  must be reachable. bore.pub is flaky from **cloud/datacenter IP ranges** (works
-  from residential). Test: `timeout 8 bash -c 'exec 3<>/dev/tcp/bore.pub/7835 && echo ok'`.
-- **frp (`WLD_FRP_SERVER` set):** the frps must be reachable on `WLD_FRP_PORT`
-  (default `7000`), have **`transport.tcpMux = false`** (this client has no
-  yamux), and `WLD_FRP_TOKEN` must match its `auth.token`. Pin a known-allowed
-  public port with `WLD_FRP_REMOTE_PORT`.
-- Run with `-v` to see the handshake (`[wld-pinggy]` / `[wld-bore]` /
-  `[wld-frp] ...`) and the exact failure.
-
-See [Zero-config tunnel](#zero-config-tunnel).
-
 ### The interactive shell (`-i`) does nothing / looks frozen
 
 `-i` needs a **real terminal** on both sides. It won't behave in a pipe, a CI job
@@ -648,21 +506,16 @@ the rest (see [Platform support](#platform-support)).
 
 ## Platform support
 
-| Platform | Relay | Client pipe / file transfer | Zero-config tunnel (`-l`) | Client exec (`-e`) / PTY shell (`-i`) |
-|----------|:-----:|:---------------------------:|:-------------------------:|:-------------------------------------:|
-| Linux    | ✅ | ✅ | ✅ | ✅ |
-| macOS    | ✅ | ✅ | ✅ | ✅ |
-| Windows  | ✅ | ✅ | ✅ (needs OpenSSH `ssh.exe`) | ⛔ (use WSL for now) |
+| Platform | Relay | Client pipe / file transfer | Client exec (`-e`) / PTY shell (`-i`) |
+|----------|:-----:|:---------------------------:|:-------------------------------------:|
+| Linux    | ✅ | ✅ | ✅ |
+| macOS    | ✅ | ✅ | ✅ |
+| Windows  | ✅ | ✅ | ⛔ (use WSL for now) |
 
-The **zero-config listener** (`-l` with no relay reachable) works on Windows too.
-On Windows it first opens a port on the router directly via **NAT-PMP / UPnP-IGD**
-(no relay, server or third party — see [Zero-config tunnel](#zero-config-tunnel));
-if that is unavailable (CGNAT / UPnP off) it falls back to the **pinggy tunnel**,
-with the embedded relay on a Win32 thread and `ssh.exe` spawned under a Job Object
-(killed with the process). The `wld lab` evasion module and the interactive PTY
-shell / `-e` execution on the listening side remain POSIX-only for now — on Windows
-the client uses a thread-based I/O loop because the console cannot be watched with
-`WSAPoll`.
+The `wld lab` evasion module and the interactive PTY shell / `-e` execution on the
+listening side are POSIX-only for now — on Windows the client uses a thread-based
+I/O loop because the console cannot be watched with `WSAPoll`. Pipe mode and file
+transfer work on Windows.
 
 ---
 
@@ -676,14 +529,10 @@ src/wld_proto.h        relay wire protocol and framing constants
 src/wld_relay.{c,h}    embeddable relay core (serve loop)
 src/relay.c            wetland-relay: thin CLI wrapper around the core
 src/wld_session.h      one-session runner shared by the client and wld lab
-src/wld_autotunnel.{c,h}  zero-config tunnel selector (shared by -l and wld lab)
-src/wld_pinggy.{c,h}   pinggy tunnel backend via ssh (zero-config default)
-src/wld_bore.{c,h}     native bore reverse-tunnel client (alt backend)
-src/wld_frp.{c,h}      native frp reverse-tunnel client (self-hosted option)
 src/client.c           wld: the client (pipe, exec and PTY modes)
 src/wld_lab.{c,h}      purple-team lab: documented, reversible TTP sims
 src/monocypher/        bundled cryptographic code
-tests/                 crypto unit, end-to-end, lab, pinggy/bore/frp tunnel tests
+tests/                 crypto unit, end-to-end, and lab tests
 docs/PROTOCOL.md       wire format and key schedule
 docs/PURPLE-LAB.md     purple-team lab: ATT&CK -> detection mapping
 ```
@@ -695,8 +544,7 @@ make test
 ```
 
 This runs the crypto unit tests, an end-to-end test that starts a relay and two
-clients on localhost, a smoke test of the `wld lab` techniques, and pinggy / bore
-/ frp auto-tunnel tests against local stand-in tunnel servers.
+clients on localhost, and a smoke test of the `wld lab` techniques.
 
 The CI workflow (`.github/workflows/build.yml`) builds and tests on Linux,
 macOS and Windows, and uploads the binaries as artifacts.
@@ -706,8 +554,8 @@ macOS and Windows, and uploads the binaries as artifacts.
 ## Roadmap
 
 Done since the first version: a secret-derived **public relay pool** (`-x`), a
-**zero-config tunnel** for NAT'd listeners (pinggy by default, or bore / self-
-hosted frp), and a **purple-team lab** module (`wld lab`).
+**built-in default relay** baked at build (`make RELAY=host[:port]`), and a
+**purple-team lab** module (`wld lab`).
 
 Not yet implemented:
 
