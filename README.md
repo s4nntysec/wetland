@@ -86,10 +86,11 @@ make windows                        # Windows .exe files in ./dist/windows (need
 ### Windows
 
 Windows binaries are produced by `make windows` (or by the CI workflow, which
-also publishes them as artifacts). The client works in pipe and file-transfer
-mode on Windows. Interactive shells (`-i`) and command execution (`-e`) on the
-listening side are not available there yet; use WSL for those (see
-[Platform support](#platform-support)).
+also publishes them as artifacts). The Windows client does pipe/file transfer
+**and** serves a shell: `-i` spawns `cmd.exe` and `-e CMD` runs `cmd /c CMD` via
+redirected pipes. It is a pipe shell, not a full PTY (no TUI line-editing), so
+for the nicest experience connect **without** `-i` (your terminal then echoes and
+line-buffers). See [Platform support](#platform-support).
 
 After installation you have two programs:
 
@@ -496,11 +497,13 @@ mode instead.
   make install PREFIX=$HOME/.local        # then ensure ~/.local/bin is on PATH
   ```
 
-### Windows: `-i` / `-e` on the listener don't work
+### Windows: the shell has no echo / no arrow keys
 
-Interactive shells and listener-side command execution need a PTY/`fork`, which
-the Windows build does not have yet. Pipe mode and file transfer work; use WSL for
-the rest (see [Platform support](#platform-support)).
+The Windows listener serves a **pipe shell** (`cmd.exe`), not a full PTY, so
+there's no local echo or line-editing when the connector is in raw mode. Fix:
+connect **without** `-i` (e.g. `wld -s SECRET`) — your own terminal then echoes
+and line-buffers, and `cmd.exe` runs each command normally. Commands and output
+work either way; only the interactive polish differs.
 
 ---
 
@@ -510,12 +513,13 @@ the rest (see [Platform support](#platform-support)).
 |----------|:-----:|:---------------------------:|:-------------------------------------:|
 | Linux    | ✅ | ✅ | ✅ |
 | macOS    | ✅ | ✅ | ✅ |
-| Windows  | ✅ | ✅ | ⛔ (use WSL for now) |
+| Windows  | ✅ | ✅ | ✅ (pipe shell: `cmd.exe`, not a full PTY) |
 
-The `wld lab` evasion module and the interactive PTY shell / `-e` execution on the
-listening side are POSIX-only for now — on Windows the client uses a thread-based
-I/O loop because the console cannot be watched with `WSAPoll`. Pipe mode and file
-transfer work on Windows.
+On Windows the listener serves a **pipe-based** shell (`-i` → `cmd.exe`, `-e CMD`
+→ `cmd /c CMD`) via `CreateProcess` with redirected pipes — commands and output
+work, but it is not a full PTY (no TUI line-editing). The client uses a
+thread-based I/O loop because the console cannot be watched with `WSAPoll`. The
+`wld lab` evasion module is still POSIX-only.
 
 ---
 

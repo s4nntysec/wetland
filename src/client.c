@@ -39,6 +39,7 @@
 #  include <getopt.h>
 #  include <io.h>
 #  include <fcntl.h>
+#  include <windows.h>
 #else
 #  include <errno.h>
 #  include <termios.h>
@@ -241,6 +242,72 @@ mode_pty_client(int tun, wld_session *sess)
 	}
 	int rc = wld_pump(tun, STDIN_FILENO, STDOUT_FILENO, sess);
 	restore_tio();
+	return rc;
+}
+
+#else  /* _WIN32: listener-side shell / command execution (pipe-based, no PTY) */
+
+/*
+ * Windows has no fork/forkpty, but CreateProcess with redirected pipes gives a
+ * working shell: interactive (-i) spawns the command interpreter (cmd.exe);
+ * -e CMD runs `cmd /c CMD`. The child's stdio is wired to pipes whose parent
+ * ends become CRT fds fed to the (thread-based) Windows pump. Not a full PTY
+ * (no TUI line-editing), but commands and output flow both ways.
+ */
+static int
+mode_win_shell(int tun, wld_session *sess, const char *cmd)
+{
+	char cmdline[4096];
+	const char *comspec = getenv("ComSpec");
+	if (comspec == NULL || comspec[0] == '\0') comspec = "cmd.exe";
+	if (cmd != NULL)
+		snprintf(cmdline, sizeof cmdline, "\"%s\" /c %s", comspec, cmd);
+	else
+		snprintf(cmdline, sizeof cmdline, "\"%s\"", comspec);
+
+	SECURITY_ATTRIBUTES sa; ZeroMemory(&sa, sizeof sa);
+	sa.nLength = sizeof sa; sa.bInheritHandle = TRUE;
+
+	HANDLE in_rd = NULL, in_wr = NULL, out_rd = NULL, out_wr = NULL;
+	if (!CreatePipe(&in_rd, &in_wr, &sa, 0)) return -1;
+	if (!CreatePipe(&out_rd, &out_wr, &sa, 0)) {
+		CloseHandle(in_rd); CloseHandle(in_wr); return -1;
+	}
+	/* parent ends must not be inherited by the child */
+	SetHandleInformation(in_wr, HANDLE_FLAG_INHERIT, 0);
+	SetHandleInformation(out_rd, HANDLE_FLAG_INHERIT, 0);
+
+	STARTUPINFOA si; ZeroMemory(&si, sizeof si); si.cb = sizeof si;
+	si.dwFlags = STARTF_USESTDHANDLES;
+	si.hStdInput = in_rd; si.hStdOutput = out_wr; si.hStdError = out_wr;
+	PROCESS_INFORMATION pi; ZeroMemory(&pi, sizeof pi);
+
+	BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE,
+	    CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+	CloseHandle(in_rd); CloseHandle(out_wr); /* child ends */
+	if (!ok) {
+		fprintf(stderr, "wld: cannot start %s\n", comspec);
+		CloseHandle(in_wr); CloseHandle(out_rd);
+		return -1;
+	}
+	CloseHandle(pi.hThread);
+
+	/* adopt the parent ends as CRT fds for the pump (_read/_write) */
+	int fd_rd = _open_osfhandle((intptr_t)out_rd, _O_RDONLY); /* child stdout */
+	int fd_wr = _open_osfhandle((intptr_t)in_wr, 0);          /* child stdin  */
+	if (fd_rd < 0 || fd_wr < 0) {
+		if (fd_rd >= 0) _close(fd_rd); else CloseHandle(out_rd);
+		if (fd_wr >= 0) _close(fd_wr); else CloseHandle(in_wr);
+		TerminateProcess(pi.hProcess, 0); CloseHandle(pi.hProcess);
+		return -1;
+	}
+
+	int rc = wld_pump(tun, fd_rd, fd_wr, sess);
+
+	TerminateProcess(pi.hProcess, 0);
+	WaitForSingleObject(pi.hProcess, 1000);
+	CloseHandle(pi.hProcess);
+	_close(fd_rd); _close(fd_wr);
 	return rc;
 }
 
@@ -472,12 +539,12 @@ wld_run_session(const struct wld_session_opts *o)
 
 	int rc;
 #ifdef _WIN32
-	if (listen_mode && (interactive || cmd != NULL)) {
-		fprintf(stderr, "wld: -i/-e on the listener need a PTY; "
-		    "not supported on Windows yet (use WSL)\n");
-		rc = 1;
+	if (listen_mode && interactive) {
+		rc = mode_win_shell(tun, &sess, NULL);     /* serve cmd.exe */
+	} else if (listen_mode && cmd != NULL) {
+		rc = mode_win_shell(tun, &sess, cmd);      /* run `cmd /c CMD` */
 	} else {
-		rc = mode_pipe(tun, &sess);
+		rc = mode_pipe(tun, &sess);                /* pipe / file transfer */
 	}
 #else
 	if (interactive) {
